@@ -1,0 +1,93 @@
+import React from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
+import { PriceTag } from '../components/PriceTag';
+import { PromotionBadge } from '../components/PromotionBadge';
+import { useBasketStore } from '../stores/basketStore';
+import { selectBestPrice } from '../pricing/selectBestPrice';
+import type { ScanStackParamList } from '../app/index';
+
+type Props = {
+  navigation: NativeStackNavigationProp<ScanStackParamList, 'ProductDetail'>;
+  route: RouteProp<ScanStackParamList, 'ProductDetail'>;
+};
+
+export function ProductDetailScreen({ route }: Props) {
+  const { scanResult } = route.params;
+  const { product, pricing, promotions } = scanResult;
+  const best = selectBestPrice(pricing);
+  const addItem = useBasketStore((s) => s.addItem);
+
+  const handleAddToBasket = () => {
+    if (best.price === null) {
+      Alert.alert('No price available', 'Cannot add item without a known price.');
+      return;
+    }
+    addItem({
+      productId: product.id,
+      name: product.name,
+      quantity: 1,
+      unitPrice: best.price,
+      appliedDiscount: 0,
+      taxable: true,
+      notes: null,
+      imageUrl: product.imageUrl,
+    });
+    Alert.alert('Added', `${product.name} added to basket.`);
+  };
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {product.imageUrl && (
+        <Image source={{ uri: product.imageUrl }} style={styles.image} resizeMode="contain" />
+      )}
+      <View style={styles.section}>
+        {product.brand && <Text style={styles.brand}>{product.brand}</Text>}
+        <Text style={styles.name}>{product.name}</Text>
+        {(product.size || product.unit) && (
+          <Text style={styles.size}>{[product.size, product.unit].filter(Boolean).join(' ')}</Text>
+        )}
+      </View>
+      <View style={styles.section}>
+        <PriceTag
+          price={best.price}
+          regularPrice={best.regularPrice}
+          isOnSale={best.isOnSale}
+          freshnessLabel={best.freshnessLabel}
+        />
+      </View>
+      {promotions.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Promotions</Text>
+          <View style={styles.promos}>
+            {promotions.map((p) => <PromotionBadge key={p.id} promotion={p} />)}
+          </View>
+        </View>
+      )}
+      {best.source && (
+        <Text style={styles.source}>
+          Pricing from {best.source.source} · {new Date(best.source.sourceTimestamp).toLocaleString()}
+        </Text>
+      )}
+      <TouchableOpacity style={styles.addBtn} onPress={handleAddToBasket}>
+        <Text style={styles.addBtnText}>Add to Basket</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  content: { padding: 20, gap: 20 },
+  image: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#f1f5f9' },
+  section: { gap: 6 },
+  brand: { fontSize: 13, color: '#64748b', textTransform: 'uppercase', fontWeight: '600', letterSpacing: 0.5 },
+  name: { fontSize: 22, fontWeight: '700', color: '#1e293b' },
+  size: { fontSize: 14, color: '#64748b' },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+  promos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  source: { fontSize: 12, color: '#94a3b8' },
+  addBtn: { backgroundColor: '#2563eb', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+});
