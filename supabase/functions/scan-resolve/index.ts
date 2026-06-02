@@ -38,14 +38,16 @@ Deno.serve(async (req) => {
   if (existing) {
     product = existing;
   } else {
-    // 2. Fall back to barcode lookup API
+    // 2. Fall back to barcode lookup API (free trial needs no key; paid uses /v1/ + user_key header)
     const apiKey = Deno.env.get('BARCODE_LOOKUP_API_KEY');
-    if (apiKey) {
+    {
       try {
-        const res = await fetch(
-          `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`,
-          { headers: { 'User-Agent': 'GroceryScan/1.0' } }
-        );
+        const endpoint = apiKey
+          ? `https://api.upcitemdb.com/prod/v1/lookup?upc=${barcode}`
+          : `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`;
+        const headers: Record<string, string> = { 'User-Agent': 'GroceryScan/1.0' };
+        if (apiKey) { headers['user_key'] = apiKey; headers['key_type'] = 'string'; }
+        const res = await fetch(endpoint, { headers });
         if (res.ok) {
           const json = await res.json() as { items?: Array<{
             title?: string; brand?: string; images?: string[]; description?: string;
