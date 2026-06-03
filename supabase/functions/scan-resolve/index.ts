@@ -2,7 +2,17 @@ import { corsHeaders, corsResponse, jsonResponse, errorResponse } from '../_shar
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { KrogerProvider } from '../_shared/pricingProviders/kroger.ts';
 import { InstacartProvider } from '../_shared/pricingProviders/instacart.ts';
-import type { PricingProvider } from '../_shared/pricingProviders/types.ts';
+import { WalmartProvider } from '../_shared/pricingProviders/walmart.ts';
+import type { PricingProvider, StorePricingResult } from '../_shared/pricingProviders/types.ts';
+
+// Domain → store chain mapping for UPCitemdb offer mining.
+// Offers from these merchants are surfaced as fallback pricing (confidence 0.65).
+const UPCITEMDB_OFFER_DOMAIN_MAP: Record<string, string> = {
+  'walmart.com': 'walmart',
+  'costco.com': 'costco',
+  'samsclub.com': 'sams_club',
+  'target.com': 'target',
+};
 
 const providers: PricingProvider[] = [
   new KrogerProvider(
@@ -10,6 +20,10 @@ const providers: PricingProvider[] = [
     Deno.env.get('KROGER_CLIENT_SECRET') ?? '',
   ),
   new InstacartProvider(Deno.env.get('INSTACART_API_KEY') ?? ''),
+  new WalmartProvider(
+    Deno.env.get('WALMART_CONSUMER_ID') ?? '',
+    Deno.env.get('WALMART_PRIVATE_KEY') ?? '',
+  ),
 ];
 
 Deno.serve(async (req) => {
@@ -35,6 +49,8 @@ Deno.serve(async (req) => {
     .or(`barcode.eq.${barcode},upc.eq.${barcode},ean.eq.${barcode},gtin.eq.${barcode}`)
     .maybeSingle();
 
+  const upcitemdbOfferPricing: Array<{ chain: string; result: StorePricingResult }> = [];
+
   if (existing) {
     product = existing;
   } else {
@@ -52,6 +68,7 @@ Deno.serve(async (req) => {
           const json = await res.json() as { items?: Array<{
             title?: string; brand?: string; images?: string[]; description?: string;
             size?: string; weight?: string; category?: string;
+            offers?: Array<{ domain?: string; price?: number; list_price?: number }>;
           }> };
           const item = json.items?.[0];
           if (item) {
@@ -69,6 +86,26 @@ Deno.serve(async (req) => {
               .select()
               .single();
             product = inserted;
+
+            // Mine UPCitemdb offers for chain-specific fallback pricing.
+            // These reflect online/catalog prices (confidence 0.65), useful for
+            // chains without a dedicated provider (Costco, WinCo, Sam's Club, etc.).
+            for (const offer of item.offers ?? []) {
+              const chain = offer.domain ? UPCITEMDB_OFFER_DOMAIN_MAP[offer.domain] : undefined;
+              if (!chain || !offer.price) continue;
+              upcitemdbOfferPricing.push({
+                chain,
+                result: {
+                  regularPrice: offer.list_price ?? offer.price,
+                  salePrice: offer.list_price && offer.price < offer.list_price ? offer.price : null,
+                  effectiveStart: null,
+                  effectiveEnd: null,
+                  confidenceScore: 0.65,
+                  source: `upcitemdb_offers:${chain}`,
+                  sourceTimestamp: new Date().toISOString(),
+                },
+              });
+            }
           }
         }
       } catch {
@@ -107,7 +144,7 @@ Deno.serve(async (req) => {
     )
     .map((r) => r.value!);
 
-  // 4. Upsert pricing rows
+  // 4. Upsert pricing rows from providers
   if (freshPricing.length > 0 && storeId) {
     await db.from('store_pricing').upsert(
       freshPricing.map((p) => ({
@@ -123,6 +160,27 @@ Deno.serve(async (req) => {
       })),
       { onConflict: 'store_id,product_id,source' }
     );
+  }
+
+  // 4b. Upsert UPCitemdb offer pricing for matching store chain
+  if (storeId && storeChain !== 'unknown') {
+    const matchingOffers = upcitemdbOfferPricing.filter((o) => o.chain === storeChain);
+    if (matchingOffers.length > 0) {
+      await db.from('store_pricing').upsert(
+        matchingOffers.map(({ result: p }) => ({
+          store_id: storeId,
+          product_id: product.id,
+          regular_price: p.regularPrice,
+          sale_price: p.salePrice,
+          effective_start: p.effectiveStart,
+          effective_end: p.effectiveEnd,
+          source_timestamp: p.sourceTimestamp,
+          confidence_score: p.confidenceScore,
+          source: p.source,
+        })),
+        { onConflict: 'store_id,product_id,source' }
+      );
+    }
   }
 
   // 5. Load all pricing for this product (including any cached)
@@ -141,8 +199,12 @@ Deno.serve(async (req) => {
         .or(`end_date.is.null,end_date.gte.${now}`)
     : { data: [] };
 
-  const confidence = freshPricing.length > 0
-    ? Math.max(...freshPricing.map((p) => p.confidenceScore))
+  const matchingOfferResults = upcitemdbOfferPricing
+    .filter((o) => o.chain === storeChain)
+    .map((o) => o.result);
+  const allFreshPricing = [...freshPricing, ...matchingOfferResults];
+  const confidence = allFreshPricing.length > 0
+    ? Math.max(...allFreshPricing.map((p) => p.confidenceScore))
     : (allPricing?.length ?? 0) > 0 ? 0.5 : 0;
 
   return jsonResponse({

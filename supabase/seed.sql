@@ -3,7 +3,13 @@ INSERT INTO stores (id, chain, name, region, location_id, active) VALUES
   ('00000000-0000-0000-0000-000000000001', 'kroger', 'Kroger - Main St', 'TX', '01400943', true),
   ('00000000-0000-0000-0000-000000000002', 'kroger', 'King Soopers - Denver', 'CO', '70300132', true),
   ('00000000-0000-0000-0000-000000000003', 'instacart', 'Safeway (via Instacart)', 'CA', 'safeway', true),
-  ('00000000-0000-0000-0000-000000000004', 'instacart', 'Albertsons (via Instacart)', 'AZ', 'albertsons', true)
+  ('00000000-0000-0000-0000-000000000004', 'instacart', 'Albertsons (via Instacart)', 'AZ', 'albertsons', true),
+  ('00000000-0000-0000-0000-000000000005', 'walmart', 'Walmart Supercenter - Dallas', 'TX', 'walmart', true),
+  ('00000000-0000-0000-0000-000000000006', 'walmart', 'Walmart Supercenter - Phoenix', 'AZ', 'walmart', true),
+  ('00000000-0000-0000-0000-000000000007', 'costco', 'Costco Wholesale - Seattle', 'WA', 'costco', true),
+  ('00000000-0000-0000-0000-000000000008', 'costco', 'Costco Wholesale - Portland', 'OR', 'costco', true),
+  ('00000000-0000-0000-0000-000000000009', 'winco', 'WinCo Foods - Boise', 'ID', 'winco_foods', true),
+  ('00000000-0000-0000-0000-000000000010', 'winco', 'WinCo Foods - Sacramento', 'CA', 'winco_foods', true)
 ON CONFLICT DO NOTHING;
 
 -- Seed: sample product for testing
