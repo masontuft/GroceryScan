@@ -67,6 +67,7 @@ export const useProductStore = create<ProductState>()(
       name: 'product-store',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ cache: s.cache }),
+      skipHydration: true,
     }
   )
 );

@@ -19,7 +19,8 @@ export function SearchScreen({ navigation }: Props) {
   const [searched, setSearched] = useState(false);
 
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
-  const location = useLocationStore((s) => ({ state: s.state, zip: s.zip }));
+  const locationState = useLocationStore((s) => s.state);
+  const locationZip = useLocationStore((s) => s.zip);
   const resolveProduct = useProductStore((s) => s.resolveProduct);
 
   const handleSearch = async () => {
@@ -40,7 +41,7 @@ export function SearchScreen({ navigation }: Props) {
     const barcode = product.upc ?? product.ean ?? product.barcode ?? product.gtin;
     if (!barcode) return;
     try {
-      const scanResult = await resolveProduct(barcode, selectedStoreId, location);
+      const scanResult = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       navigation.navigate('ProductDetail', { scanResult, barcode });
     } catch {
       // silently ignore, product detail will show partial data
