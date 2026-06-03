@@ -42,6 +42,6 @@ export const useLocationStore = create<LocationState>()(
       setManual: (state, zip) => set({ state, zip, city: null, county: null, source: 'manual' }),
       clear: () => set({ state: null, zip: null, city: null, county: null, source: null }),
     }),
-    { name: 'location-store', storage: createJSONStorage(() => AsyncStorage) }
+    { name: 'location-store', storage: createJSONStorage(() => AsyncStorage), skipHydration: true }
   )
 );

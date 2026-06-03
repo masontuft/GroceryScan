@@ -34,6 +34,7 @@ export const useStoreStore = create<StoreState>()(
       name: 'store-store',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ selectedStoreId: s.selectedStoreId }),
+      skipHydration: true,
     }
   )
 );

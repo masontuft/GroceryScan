@@ -22,7 +22,8 @@ export function ScanScreen({ navigation }: Props) {
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
-  const location = useLocationStore((s) => ({ state: s.state, zip: s.zip }));
+  const locationState = useLocationStore((s) => s.state);
+  const locationZip = useLocationStore((s) => s.zip);
   const { isConnected } = useNetworkStatus();
 
   const handleBarcode = async (barcode: string) => {
@@ -30,7 +31,7 @@ export function ScanScreen({ navigation }: Props) {
     lastScanned.current = barcode;
     setLoading(true);
     try {
-      const result = await resolveProduct(barcode, selectedStoreId, location);
+      const result = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       navigation.navigate('ProductDetail', { scanResult: result, barcode });
     } catch {
       Alert.alert('Not Found', ErrorMessages.UNKNOWN_BARCODE);
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   scanFrame: { width: 260, height: 160, borderWidth: 2, borderColor: '#fff', borderRadius: 8 },
   hint: { color: '#fff', fontSize: 15, opacity: 0.85 },
-  loadingOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: '#fff', fontSize: 16 },
   manual: { flexDirection: 'row', padding: 16, gap: 10, backgroundColor: '#fff' },
   input: { flex: 1, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 44, fontSize: 15 },

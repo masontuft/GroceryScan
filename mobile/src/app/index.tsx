@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { TouchableOpacity, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -12,6 +12,8 @@ import { SearchScreen } from '../screens/SearchScreen';
 import { StoreSelectScreen } from '../screens/StoreSelectScreen';
 import { LocationScreen } from '../screens/LocationScreen';
 
+import { useBasketStore } from '../stores/basketStore';
+import { useProductStore } from '../stores/productStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 
@@ -100,6 +102,13 @@ function MainTabs({ navigation }: { navigation: any }) {
 }
 
 export function AppNavigator() {
+  useEffect(() => {
+    useBasketStore.persist.rehydrate();
+    useProductStore.persist.rehydrate();
+    useStoreStore.persist.rehydrate();
+    useLocationStore.persist.rehydrate();
+  }, []);
+
   return (
     <NavigationContainer>
       <Root.Navigator screenOptions={{ headerShown: false }}>

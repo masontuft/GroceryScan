@@ -85,6 +85,7 @@ export const useBasketStore = create<BasketState>()(
       name: 'basket-store',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ items: s.items, storeId: s.storeId, location: s.location }),
+      skipHydration: true,
     }
   )
 );
