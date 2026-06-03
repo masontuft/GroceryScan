@@ -2,11 +2,12 @@ import React from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
 import { useBasketStore } from '../stores/basketStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
-import type { ScanStackParamList } from '../app/index';
+import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'ProductDetail'>;
@@ -18,6 +19,9 @@ export function ProductDetailScreen({ route }: Props) {
   const { product, pricing, promotions } = scanResult;
   const best = selectBestPrice(pricing);
   const addItem = useBasketStore((s) => s.addItem);
+  // useNavigation reaches the root navigator so we can open the ManualPrice modal
+  // from within the nested ScanStack / SearchStack.
+  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const handleAddToBasket = () => {
     if (best.price === null) {
@@ -56,6 +60,21 @@ export function ProductDetailScreen({ route }: Props) {
           isOnSale={best.isOnSale}
           freshnessLabel={best.freshnessLabel}
         />
+        {best.price === null && (
+          <TouchableOpacity
+            style={styles.manualPriceBtn}
+            onPress={() =>
+              rootNav.navigate('ManualPrice', {
+                productId: product.id,
+                productName: product.name,
+                imageUrl: product.imageUrl ?? null,
+              })
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
+          </TouchableOpacity>
+        )}
       </View>
       {promotions.length > 0 && (
         <View style={styles.section}>
@@ -90,4 +109,14 @@ const styles = StyleSheet.create({
   source: { fontSize: 12, color: '#94a3b8' },
   addBtn: { backgroundColor: '#2563eb', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+  manualPriceBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  manualPriceBtnText: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
 });

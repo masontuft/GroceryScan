@@ -11,6 +11,7 @@ import { BasketScreen } from '../screens/BasketScreen';
 import { SearchScreen } from '../screens/SearchScreen';
 import { StoreSelectScreen } from '../screens/StoreSelectScreen';
 import { LocationScreen } from '../screens/LocationScreen';
+import { ManualPriceScreen } from '../screens/ManualPriceScreen';
 
 import { useBasketStore } from '../stores/basketStore';
 import { useProductStore } from '../stores/productStore';
@@ -31,6 +32,13 @@ export type RootStackParamList = {
   MainTabs: undefined;
   StoreSelect: undefined;
   Location: undefined;
+  ManualPrice: {
+    productId: string;          // barcode string (unknown product) OR real product UUID (known, no price)
+    productName: string;
+    imageUrl: string | null;
+    productNameEditable?: boolean;   // true → came from "Not Found"; show editable name field
+    productIdIsBarcode?: boolean;    // true → productId is a raw barcode, must upsert product in DB
+  };
 };
 
 const ScanStack = createNativeStackNavigator<ScanStackParamList>();
@@ -122,6 +130,11 @@ export function AppNavigator() {
           name="Location"
           component={LocationScreen}
           options={{ headerShown: true, presentation: 'modal', title: 'My Location' }}
+        />
+        <Root.Screen
+          name="ManualPrice"
+          component={ManualPriceScreen}
+          options={{ headerShown: true, presentation: 'modal', title: 'Enter Price' }}
         />
       </Root.Navigator>
     </NavigationContainer>

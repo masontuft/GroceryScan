@@ -1,13 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useProductStore } from '../stores/productStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
-import type { ScanStackParamList } from '../app/index';
+import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'Scan'>;
@@ -25,6 +26,15 @@ export function ScanScreen({ navigation }: Props) {
   const locationState = useLocationStore((s) => s.state);
   const locationZip = useLocationStore((s) => s.zip);
   const { isConnected } = useNetworkStatus();
+  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  // Reset scan state every time this screen comes back into focus (e.g. after
+  // the ManualPrice modal is dismissed). This prevents the camera from re-firing
+  // the same barcode alert in a loop while a modal is open on top.
+  useFocusEffect(useCallback(() => {
+    lastScanned.current = null;
+    setScanning(false);
+  }, []));
 
   const handleBarcode = async (barcode: string) => {
     if (lastScanned.current === barcode || loading) return;
@@ -34,8 +44,28 @@ export function ScanScreen({ navigation }: Props) {
       const result = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       navigation.navigate('ProductDetail', { scanResult: result, barcode });
     } catch {
-      Alert.alert('Not Found', ErrorMessages.UNKNOWN_BARCODE);
-      lastScanned.current = null;
+      // Product identity not found — offer the user a chance to enter name + price manually.
+      Alert.alert(
+        'Not Found',
+        'This barcode isn\'t in our database. You can add it manually with a name and price.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Enter Manually',
+            onPress: () =>
+              rootNav.navigate('ManualPrice', {
+                productId: barcode,
+                productName: `Item (${barcode})`,
+                imageUrl: null,
+                productNameEditable: true,  // let the user set a real name
+                productIdIsBarcode: true,   // signal to save barcode → products table
+              }),
+          },
+        ]
+      );
+      // Do NOT reset lastScanned here — keeping it set prevents the camera from
+      // re-firing the same barcode alert every 2 seconds while the modal is open.
+      // State is cleared by useFocusEffect when this screen regains focus.
     } finally {
       setLoading(false);
     }

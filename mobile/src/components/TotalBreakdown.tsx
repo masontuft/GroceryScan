@@ -5,14 +5,19 @@ import type { BasketTotal } from '../types/basket';
 
 interface Props {
   total: BasketTotal;
+  /** True when using locally-computed totals (backend hasn't responded yet) */
+  isEstimate?: boolean;
 }
 
-export function TotalBreakdown({ total }: Props) {
+export function TotalBreakdown({ total, isEstimate = false }: Props) {
   return (
     <View style={styles.container}>
+      {isEstimate && (
+        <Text style={styles.estimateNote}>Based on local tax rates</Text>
+      )}
       <Row label="Subtotal" value={total.subtotal} />
       {total.discounts > 0 && <Row label="Savings" value={-total.discounts} color="#16a34a" />}
-      <Row label="Est. Tax" value={total.tax} note="estimate" />
+      <Row label="Est. Tax" value={total.tax} note={total.tax === 0 ? 'tax-exempt' : 'estimate'} />
       <View style={styles.divider} />
       <Row label="Est. Total" value={total.estimatedTotal} bold />
     </View>
@@ -34,6 +39,7 @@ function Row({ label, value, color, bold, note }: { label: string; value: number
 
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#f8fafc', borderRadius: 12, gap: 8 },
+  estimateNote: { fontSize: 11, color: '#94a3b8', textAlign: 'right', marginBottom: 2 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   label: { fontSize: 15, color: '#64748b' },
   value: { fontSize: 15, color: '#1e293b', fontWeight: '500' },

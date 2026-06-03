@@ -61,6 +61,94 @@ export async function searchProducts(q: string, storeId: string | null): Promise
   return (result.data ?? []) as Product[];
 }
 
+export async function submitManualEntry(args: {
+  barcode?: string;
+  productName?: string;
+  price: number;
+  storeId?: string | null;
+  customStoreName?: string | null;
+  existingProductId?: string | null;
+  brand?: string | null;
+  size?: string | null;
+  unit?: string | null;
+  categories?: string[] | null;
+}): Promise<{ productId: string; storeId: string | null }> {
+  const { data, error } = await supabase.functions.invoke('manual-submit', { body: args });
+  if (error) {
+    // FunctionsHttpError carries the raw Response in `error.context`.
+    // Try to pull the JSON body so the real server-side message is shown.
+    const ctx = (error as unknown as { context?: Response }).context;
+    if (ctx instanceof Response) {
+      try {
+        const body = await ctx.json() as { error?: string };
+        if (body.error) throw new Error(body.error);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+      }
+    }
+    throw error;
+  }
+  return data as { productId: string; storeId: string | null };
+}
+
+/**
+ * Direct client-side lookup of a product by barcode/UPC/EAN/GTIN.
+ * Used as a fallback when scan-resolve returns 404, so that products
+ * entered manually via ManualPriceScreen are always discoverable on
+ * re-scan without requiring a pricing provider to match.
+ * Returns null if no product row is found.
+ */
+export async function lookupProductByBarcode(barcode: string): Promise<ScanResult | null> {
+  const { data: product, error } = await supabase
+    .from('products')
+    .select('*')
+    .or(`barcode.eq.${barcode},upc.eq.${barcode},ean.eq.${barcode},gtin.eq.${barcode}`)
+    .maybeSingle();
+
+  if (error || !product) return null;
+
+  // Also fetch any stored pricing rows for this product so the best price
+  // can be selected (including manually-entered prices from manual-submit).
+  const { data: pricingRows } = await supabase
+    .from('store_pricing')
+    .select('*')
+    .eq('product_id', product.id)
+    .order('confidence_score', { ascending: false });
+
+  const pricing: StorePricing[] = (pricingRows ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    storeId: row.store_id as string,
+    productId: row.product_id as string,
+    regularPrice: row.regular_price as number,
+    salePrice: row.sale_price as number | null,
+    effectiveStart: row.effective_start as string | null,
+    effectiveEnd: row.effective_end as string | null,
+    sourceTimestamp: row.source_timestamp as string,
+    confidenceScore: row.confidence_score as number,
+    source: row.source as string,
+  }));
+
+  return {
+    product: {
+      id: product.id as string,
+      name: product.name as string,
+      brand: product.brand as string | null,
+      barcode: product.barcode as string | null,
+      upc: product.upc as string | null,
+      ean: product.ean as string | null,
+      gtin: product.gtin as string | null,
+      sku: product.sku as string | null,
+      size: product.size as string | null,
+      unit: product.unit as string | null,
+      imageUrl: product.image_url as string | null,
+      categories: (product.categories as string[]) ?? [],
+    },
+    pricing,
+    promotions: [],
+    confidence: pricing.length > 0 ? Math.max(...pricing.map((p) => p.confidenceScore)) : 0,
+  };
+}
+
 export async function fetchStores(): Promise<Store[]> {
   const { data, error } = await supabase.from('stores').select('*').eq('active', true);
   if (error) throw error;

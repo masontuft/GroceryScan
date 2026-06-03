@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { resolveBarcode, type ScanResult } from '../services/api';
+import { resolveBarcode, lookupProductByBarcode, type ScanResult } from '../services/api';
 import type { Product } from '../types/product';
 
 const PRODUCT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
@@ -42,7 +42,17 @@ export const useProductStore = create<ProductState>()(
           if (productFresh && pricingFresh) return cached.scanResult;
         }
 
-        const result = await resolveBarcode(barcode, storeId, location);
+        let result: ScanResult;
+        try {
+          result = await resolveBarcode(barcode, storeId, location);
+        } catch {
+          // scan-resolve returned 404 or errored. Fall back to a direct Supabase
+          // products table query so manually-entered items are always found on re-scan.
+          const fallback = await lookupProductByBarcode(barcode);
+          if (!fallback) throw new Error('UNKNOWN_BARCODE');
+          result = fallback;
+        }
+
         set((state) => ({
           cache: {
             ...state.cache,
