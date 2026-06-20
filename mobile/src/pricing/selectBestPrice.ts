@@ -9,6 +9,15 @@ export interface BestPrice {
   freshnessLabel: FreshnessLabel;
 }
 
+/** Returns [min, max] effective prices across all pricing rows, or null if no prices exist. */
+export function getPriceRange(pricingRows: StorePricing[]): [min: number, max: number] | null {
+  const prices = pricingRows
+    .map((r) => r.salePrice ?? r.regularPrice)
+    .filter((p): p is number => p !== null);
+  if (prices.length === 0) return null;
+  return [Math.min(...prices), Math.max(...prices)];
+}
+
 export function selectBestPrice(pricingRows: StorePricing[]): BestPrice {
   if (pricingRows.length === 0) {
     return { price: null, isOnSale: false, regularPrice: null, source: null, freshnessLabel: 'cached' };

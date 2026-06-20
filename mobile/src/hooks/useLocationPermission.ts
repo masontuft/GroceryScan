@@ -1,7 +1,12 @@
 import { useState, useCallback } from 'react';
 import * as Location from 'expo-location';
 
-export function useLocationPermission() {
+type LocationPermissionTuple = [
+  status: Location.PermissionStatus | null,
+  request: () => Promise<boolean>,
+];
+
+export function useLocationPermission(): LocationPermissionTuple {
   const [status, setStatus] = useState<Location.PermissionStatus | null>(null);
 
   const request = useCallback(async () => {
@@ -10,5 +15,5 @@ export function useLocationPermission() {
     return s === 'granted';
   }, []);
 
-  return { status, request };
+  return [status, request];
 }

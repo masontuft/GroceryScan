@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
+export type Coordinate = [lat: number, lng: number];
+
 interface LocationState {
   state: string | null;
   zip: string | null;
@@ -27,7 +29,8 @@ export const useLocationStore = create<LocationState>()(
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') return;
         const loc = await Location.getCurrentPositionAsync({});
-        const [geo] = await Location.reverseGeocodeAsync(loc.coords);
+        const coords: Coordinate = [loc.coords.latitude, loc.coords.longitude];
+        const [geo] = await Location.reverseGeocodeAsync({ latitude: coords[0], longitude: coords[1] });
         if (geo) {
           set({
             state: geo.region ?? null,
