@@ -10,6 +10,11 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
+function isWincoStore(stores: { id: string; chain: string }[], storeId: string | null) {
+  if (!storeId) return false;
+  return stores.find((s) => s.id === storeId)?.chain?.toLowerCase().includes('winco') ?? false;
+}
+
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'Scan'>;
 };
@@ -23,10 +28,12 @@ export function ScanScreen({ navigation }: Props) {
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
+  const stores = useStoreStore((s) => s.stores);
   const locationState = useLocationStore((s) => s.state);
   const locationZip = useLocationStore((s) => s.zip);
   const { isConnected } = useNetworkStatus();
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const isWinco = isWincoStore(stores, selectedStoreId);
 
   // Reset scan state every time this screen comes back into focus (e.g. after
   // the ManualPrice modal is dismissed). This prevents the camera from re-firing
@@ -42,7 +49,12 @@ export function ScanScreen({ navigation }: Props) {
     setLoading(true);
     try {
       const result = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
-      navigation.navigate('ProductDetail', { scanResult: result, barcode });
+      if (isWinco) {
+        // Winco has no live pricing — go straight to quick entry with the resolved product
+        rootNav.navigate('WincoEntry', { initialBarcode: barcode });
+      } else {
+        navigation.navigate('ProductDetail', { scanResult: result, barcode });
+      }
     } catch {
       // Product identity not found — offer the user a chance to enter name + price manually.
       Alert.alert(
@@ -116,6 +128,15 @@ export function ScanScreen({ navigation }: Props) {
           <Text style={styles.loadingText}>Looking up product…</Text>
         </View>
       )}
+      {isWinco && (
+        <TouchableOpacity
+          style={styles.wincoBar}
+          onPress={() => rootNav.navigate('WincoEntry', {})}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.wincoBarText}>⚡ Winco Quick Entry — tap to add multiple items fast</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.manual}>
         <TextInput
           style={styles.input}
@@ -152,4 +173,6 @@ const styles = StyleSheet.create({
   searchBtnText: { color: '#fff', fontWeight: '700' },
   offlineBanner: { backgroundColor: '#f59e0b', padding: 8, alignItems: 'center' },
   offlineText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  wincoBar: { backgroundColor: '#1e40af', paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center' },
+  wincoBarText: { color: '#fff', fontWeight: '600', fontSize: 13 },
 });

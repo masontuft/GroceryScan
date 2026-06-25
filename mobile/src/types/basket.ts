@@ -7,6 +7,7 @@ export interface BasketItem {
   taxable: boolean;
   notes: string | null;
   imageUrl: string | null;
+  category: string | null;
 }
 
 export interface BasketTotal {

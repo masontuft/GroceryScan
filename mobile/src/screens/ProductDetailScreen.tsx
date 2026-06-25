@@ -7,6 +7,7 @@ import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
 import { useBasketStore } from '../stores/basketStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
+import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 type Props = {
@@ -28,15 +29,17 @@ export function ProductDetailScreen({ route }: Props) {
       Alert.alert('No price available', 'Cannot add item without a known price.');
       return;
     }
+    const category = normalizeCategory(product.categories[0]);
     addItem({
       productId: product.id,
       name: product.name,
       quantity: 1,
       unitPrice: best.price,
       appliedDiscount: 0,
-      taxable: true,
+      taxable: !isTaxExempt(category),
       notes: null,
       imageUrl: product.imageUrl,
+      category,
     });
     Alert.alert('Added', `${product.name} added to basket.`);
   };

@@ -12,6 +12,8 @@ import { SearchScreen } from '../screens/SearchScreen';
 import { StoreSelectScreen } from '../screens/StoreSelectScreen';
 import { LocationScreen } from '../screens/LocationScreen';
 import { ManualPriceScreen } from '../screens/ManualPriceScreen';
+import { WincoQuickEntryScreen } from '../screens/WincoQuickEntryScreen';
+import { QuickEntryScreen } from '../screens/QuickEntryScreen';
 
 import { useBasketStore } from '../stores/basketStore';
 import { useProductStore } from '../stores/productStore';
@@ -38,6 +40,9 @@ export type RootStackParamList = {
     imageUrl: string | null;
     productNameEditable?: boolean;   // true → came from "Not Found"; show editable name field
     productIdIsBarcode?: boolean;    // true → productId is a raw barcode, must upsert product in DB
+  };
+  WincoEntry: {
+    initialBarcode?: string;    // optional barcode to auto-resolve on mount
   };
 };
 
@@ -80,6 +85,15 @@ function MainTabs({ navigation }: { navigation: any }) {
           tabBarLabel: 'Scan',
           tabBarIcon: () => <Text>📷</Text>,
           headerShown: false,
+        }}
+      />
+      <Tab.Screen
+        name="QuickEntryTab"
+        component={QuickEntryScreen}
+        options={{
+          tabBarLabel: 'Quick Add',
+          tabBarIcon: () => <Text>⚡</Text>,
+          title: 'Quick Add',
         }}
       />
       <Tab.Screen
@@ -135,6 +149,11 @@ export function AppNavigator() {
           name="ManualPrice"
           component={ManualPriceScreen}
           options={{ headerShown: true, presentation: 'modal', title: 'Enter Price' }}
+        />
+        <Root.Screen
+          name="WincoEntry"
+          component={WincoQuickEntryScreen}
+          options={{ headerShown: true, presentation: 'modal', title: 'Winco Quick Entry' }}
         />
       </Root.Navigator>
     </NavigationContainer>
