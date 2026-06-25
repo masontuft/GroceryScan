@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "GroceryScan",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "pkill -f 'expo start' 2>/dev/null || true; pkill -f 'react-native start' 2>/dev/null || true; cd mobile && npm start"
+      ],
+      "port": 8081
+    }
+  ]
+}

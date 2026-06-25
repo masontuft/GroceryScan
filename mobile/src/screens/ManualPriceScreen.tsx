@@ -17,6 +17,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { submitManualEntry } from '../services/api';
+import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import type { RootStackParamList } from '../app/index';
 
 type Props = {
@@ -94,15 +95,17 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         selectStore(pickedStoreId);
       }
 
+      const category = normalizeCategory(categories[0]);
       addItem({
         productId: result.productId,
         name: productName.trim(),
         quantity: 1,
         unitPrice: parsedPrice,
         appliedDiscount: 0,
-        taxable: true,
+        taxable: !isTaxExempt(category),
         notes: null,
         imageUrl: imageUrl ?? null,
+        category: category !== 'Other' ? category : (categories[0] ?? null),
       });
 
       Alert.alert('Added', `${productName.trim()} added to basket.`, [

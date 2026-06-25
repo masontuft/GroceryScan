@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Start Expo (mobile)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${env:SHELL}",
+      "runtimeArgs": [
+        "-c",
+        "pkill -f 'expo start' || true; pkill -f 'react-native start' || true; cd '${workspaceFolder}/mobile' && npm start"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "dev",
+        "order": 1
+      }
+    }
+  ]
+}

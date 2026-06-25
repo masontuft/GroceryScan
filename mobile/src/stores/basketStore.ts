@@ -14,6 +14,7 @@ interface BasketState {
   addItem: (item: BasketItem) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, qty: number) => void;
+  updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'notes'>>) => void;
   clearBasket: () => void;
   setStore: (storeId: string | null) => void;
   setLocation: (location: { state: string | null; zip: string | null }) => void;
@@ -56,6 +57,15 @@ export const useBasketStore = create<BasketState>()(
         }
         set((state) => ({
           items: state.items.map((i) => (i.productId === productId ? { ...i, quantity: qty } : i)),
+        }));
+        get().recalculate();
+      },
+
+      updateItem: (productId, changes) => {
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.productId === productId ? { ...i, ...changes } : i
+          ),
         }));
         get().recalculate();
       },
