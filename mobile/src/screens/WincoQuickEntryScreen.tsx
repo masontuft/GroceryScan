@@ -244,7 +244,12 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
             onSubmitEditing={handleManualLookup}
             placeholderTextColor="#94a3b8"
           />
-          <TouchableOpacity style={styles.lookupBtn} onPress={handleManualLookup}>
+          <TouchableOpacity
+            style={styles.lookupBtn}
+            onPress={handleManualLookup}
+            accessibilityLabel="Look up product"
+            accessibilityRole="button"
+          >
             <Text style={styles.lookupBtnText}>Look up</Text>
           </TouchableOpacity>
         </View>
@@ -286,6 +291,10 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
                   key={cat}
                   style={[styles.chip, selectedCategory === cat && styles.chipSelected]}
                   onPress={() => setSelectedCategory(cat)}
+                  hitSlop={{ top: 11, bottom: 11 }}
+                  accessibilityLabel={cat}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedCategory === cat }}
                 >
                   <Text style={[styles.chipText, selectedCategory === cat && styles.chipTextSelected]}>
                     {cat}
@@ -313,6 +322,9 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
                 onPress={handleScanPriceTag}
                 disabled={ocrLoading}
                 activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Scan price tag"
+                accessibilityRole="button"
               >
                 <Text style={styles.ocrBtnText}>{ocrLoading ? '…' : '📷'}</Text>
               </TouchableOpacity>
@@ -323,6 +335,9 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
               onPress={handleAdd}
               disabled={!canAdd}
               activeOpacity={0.8}
+              accessibilityLabel="Add to basket"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canAdd }}
             >
               <Text style={styles.addBtnText}>Add to Basket</Text>
             </TouchableOpacity>
@@ -348,7 +363,12 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
         )}
 
         {/* ── Done button ── */}
-        <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.doneBtn}
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Done, go to basket"
+          accessibilityRole="button"
+        >
           <Text style={styles.doneBtnText}>Done — Go to Basket</Text>
         </TouchableOpacity>
       </View>
@@ -391,7 +411,7 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     borderRadius: 8,
     paddingHorizontal: 10,
-    height: 40,
+    height: 44,
     fontSize: 14,
     color: '#1e293b',
   },

@@ -61,6 +61,9 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
         style={styles.row}
         onPress={() => setExpanded((v) => !v)}
         activeOpacity={0.75}
+        accessibilityLabel={`${item.name}, ${formatCurrency(lineTotal)}`}
+        accessibilityHint="Double-tap to edit"
+        accessibilityRole="button"
       >
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
@@ -78,20 +81,29 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
           <TouchableOpacity
             style={styles.qtyBtn}
             onPress={() => onQuantityChange(item.productId, item.quantity - 1)}
+            accessibilityLabel={`Decrease quantity of ${item.name}`}
+            accessibilityRole="button"
           >
             <Text style={styles.qtyBtnText}>−</Text>
           </TouchableOpacity>
-          <Text style={styles.qty}>{item.quantity}</Text>
+          <Text style={styles.qty} accessibilityLabel={`Quantity: ${item.quantity}`}>{item.quantity}</Text>
           <TouchableOpacity
             style={styles.qtyBtn}
             onPress={() => onQuantityChange(item.productId, item.quantity + 1)}
+            accessibilityLabel={`Increase quantity of ${item.name}`}
+            accessibilityRole="button"
           >
             <Text style={styles.qtyBtnText}>+</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.right}>
           <Text style={styles.total}>{formatCurrency(lineTotal)}</Text>
-          <TouchableOpacity onPress={() => onRemove(item.productId)}>
+          <TouchableOpacity
+            onPress={() => onRemove(item.productId)}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            accessibilityLabel={`Remove ${item.name} from basket`}
+            accessibilityRole="button"
+          >
             <Text style={styles.remove}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -133,6 +145,10 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
                   key={cat}
                   style={[styles.chip, editCategory === cat && styles.chipSelected]}
                   onPress={() => setEditCategory(cat)}
+                  hitSlop={{ top: 9, bottom: 9 }}
+                  accessibilityLabel={cat}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: editCategory === cat }}
                 >
                   <Text style={[styles.chipText, editCategory === cat && styles.chipTextSelected]}>
                     {cat}
@@ -153,10 +169,20 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
           </View>
 
           <View style={styles.editActions}>
-            <TouchableOpacity style={styles.discardBtn} onPress={handleDiscard}>
+            <TouchableOpacity
+              style={styles.discardBtn}
+              onPress={handleDiscard}
+              accessibilityLabel="Discard changes"
+              accessibilityRole="button"
+            >
               <Text style={styles.discardText}>Discard</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleSave}
+              accessibilityLabel="Save changes"
+              accessibilityRole="button"
+            >
               <Text style={styles.saveText}>Save</Text>
             </TouchableOpacity>
           </View>
@@ -190,9 +216,9 @@ const styles = StyleSheet.create({
   discount: { fontSize: 12, color: '#16a34a', marginTop: 1 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
@@ -224,7 +250,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 8,
-    height: 40,
+    height: 44,
     paddingHorizontal: 10,
     fontSize: 15,
     color: '#1e293b',
@@ -236,7 +262,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 8,
-    height: 40,
+    height: 44,
     paddingHorizontal: 10,
     backgroundColor: '#fff',
     gap: 4,

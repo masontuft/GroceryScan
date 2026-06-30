@@ -212,7 +212,12 @@ export function ScanScreen({ navigation }: Props) {
           returnKeyType="search"
           onSubmitEditing={handleManualSubmit}
         />
-        <TouchableOpacity style={styles.searchBtn} onPress={handleManualSubmit}>
+        <TouchableOpacity
+          style={styles.searchBtn}
+          onPress={handleManualSubmit}
+          accessibilityLabel="Search by barcode"
+          accessibilityRole="button"
+        >
           <Text style={styles.searchBtnText}>Search</Text>
         </TouchableOpacity>
       </View>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, SectionList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Alert, View, Text, SectionList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { BasketAnalysisModal } from '../components/BasketAnalysisModal';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -137,10 +137,26 @@ export function BasketScreen() {
               style={styles.analysisBtn}
               onPress={() => setAnalysisVisible(true)}
               activeOpacity={0.8}
+              accessibilityLabel="View basket analysis"
+              accessibilityRole="button"
             >
               <Text style={styles.analysisBtnText}>📊  Basket Analysis</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.clearBtn} onPress={clearBasket}>
+            <TouchableOpacity
+              style={styles.clearBtn}
+              onPress={() =>
+                Alert.alert(
+                  'Clear Basket',
+                  'Remove all items from your basket?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Clear', style: 'destructive', onPress: clearBasket },
+                  ]
+                )
+              }
+              accessibilityLabel="Clear basket"
+              accessibilityRole="button"
+            >
               <Text style={styles.clearText}>Clear Basket</Text>
             </TouchableOpacity>
           </View>
