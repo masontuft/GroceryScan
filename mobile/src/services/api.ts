@@ -48,17 +48,24 @@ export async function recalculateBasket(
   return data as BasketTotal;
 }
 
-export async function searchProducts(q: string, storeId: string | null): Promise<Product[]> {
-  // Use supabase client query directly for search
-  const query = supabase
-    .from('products')
-    .select('*')
-    .or(`name.ilike.%${q}%,brand.ilike.%${q}%`)
-    .limit(20);
-
-  const result = await query;
-  if (result.error) throw result.error;
-  return (result.data ?? []) as Product[];
+export async function searchProducts(q: string, _storeId: string | null): Promise<Product[]> {
+  const { data, error } = await supabase.rpc('search_products_fuzzy', { query: q, threshold: 0.3 });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    name: row.name as string,
+    brand: row.brand as string | null,
+    barcode: row.barcode as string | null,
+    upc: row.upc as string | null,
+    ean: row.ean as string | null,
+    gtin: row.gtin as string | null,
+    sku: row.sku as string | null,
+    size: row.size as string | null,
+    unit: row.unit as string | null,
+    imageUrl: row.image_url as string | null,
+    categories: (row.categories as string[]) ?? [],
+    manufacturerPrefix: (row.manufacturer_prefix as string | null) ?? null,
+  }));
 }
 
 export async function submitManualEntry(args: {
@@ -142,11 +149,20 @@ export async function lookupProductByBarcode(barcode: string): Promise<ScanResul
       unit: product.unit as string | null,
       imageUrl: product.image_url as string | null,
       categories: (product.categories as string[]) ?? [],
+      manufacturerPrefix: product.manufacturer_prefix as string | null ?? null,
     },
     pricing,
     promotions: [],
     confidence: pricing.length > 0 ? Math.max(...pricing.map((p) => p.confidenceScore)) : 0,
   };
+}
+
+export async function ocrPriceTag(imageBase64: string): Promise<{ price: number | null; productName: string | null; rawText: string }> {
+  const { data, error } = await supabase.functions.invoke('ocr-price', {
+    body: { imageBase64 },
+  });
+  if (error) throw error;
+  return data as { price: number | null; productName: string | null; rawText: string };
 }
 
 export async function fetchStores(): Promise<Store[]> {

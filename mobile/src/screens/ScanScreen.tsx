@@ -1,13 +1,15 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import type { CameraView as CameraViewType } from 'expo-camera';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { useProductStore } from '../stores/productStore';
+import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useProductStore, ProductNotFoundError } from '../stores/productStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
+import { ocrPriceTag } from '../services/api';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 function isWincoStore(stores: { id: string; chain: string }[], storeId: string | null) {
@@ -24,7 +26,9 @@ export function ScanScreen({ navigation }: Props) {
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const lastScanned = useRef<string | null>(null);
+  const cameraRef = useRef<CameraViewType>(null);
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
@@ -34,6 +38,7 @@ export function ScanScreen({ navigation }: Props) {
   const { isConnected } = useNetworkStatus();
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const isWinco = isWincoStore(stores, selectedStoreId);
+  const isFocused = useIsFocused();
 
   // Reset scan state every time this screen comes back into focus (e.g. after
   // the ManualPrice modal is dismissed). This prevents the camera from re-firing
@@ -55,31 +60,88 @@ export function ScanScreen({ navigation }: Props) {
       } else {
         navigation.navigate('ProductDetail', { scanResult: result, barcode });
       }
-    } catch {
-      // Product identity not found — offer the user a chance to enter name + price manually.
-      Alert.alert(
-        'Not Found',
-        'This barcode isn\'t in our database. You can add it manually with a name and price.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Enter Manually',
-            onPress: () =>
-              rootNav.navigate('ManualPrice', {
-                productId: barcode,
-                productName: `Item (${barcode})`,
-                imageUrl: null,
-                productNameEditable: true,  // let the user set a real name
-                productIdIsBarcode: true,   // signal to save barcode → products table
-              }),
+    } catch (err) {
+      if (err instanceof ProductNotFoundError && err.suggestions.length > 0) {
+        // Fuzzy match found — show "Did you mean?" options before manual entry
+        const buttons = [
+          ...err.suggestions.slice(0, 3).map((s) => ({
+            text: s.name,
+            onPress: async () => {
+              try {
+                const result = await resolveProduct(s.upc ?? s.barcode ?? s.id, selectedStoreId, { state: locationState, zip: locationZip });
+                navigation.navigate('ProductDetail', { scanResult: result, barcode });
+              } catch {
+                // fall through to ProductDetail with no pricing
+              }
+            },
+          })),
+          { text: 'Enter Manually', style: 'cancel' as const,
+            onPress: () => rootNav.navigate('ManualPrice', {
+              productId: barcode, productName: `Item (${barcode})`, imageUrl: null,
+              productNameEditable: true, productIdIsBarcode: true,
+            }),
           },
-        ]
-      );
+        ];
+        Alert.alert('Did you mean?', 'We couldn\'t find that exact barcode. Is this what you\'re scanning?', buttons);
+      } else {
+        // Product identity not found — offer OCR price tag scan or plain manual entry.
+        Alert.alert(
+          'Barcode Not Found',
+          'Point the camera at the shelf price label to read the price automatically, or enter it manually.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Enter Manually',
+              onPress: () =>
+                rootNav.navigate('ManualPrice', {
+                  productId: barcode,
+                  productName: `Item (${barcode})`,
+                  imageUrl: null,
+                  productNameEditable: true,
+                  productIdIsBarcode: true,
+                }),
+            },
+            {
+              text: 'Scan Price Tag',
+              onPress: () => handleScanPriceTag(barcode),
+            },
+          ]
+        );
+      }
       // Do NOT reset lastScanned here — keeping it set prevents the camera from
       // re-firing the same barcode alert every 2 seconds while the modal is open.
       // State is cleared by useFocusEffect when this screen regains focus.
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleScanPriceTag = async (barcode: string) => {
+    if (!cameraRef.current) return;
+    setOcrLoading(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
+      if (!photo?.base64) throw new Error('No image captured');
+      const result = await ocrPriceTag(photo.base64);
+      rootNav.navigate('ManualPrice', {
+        productId: barcode,
+        productName: result.productName ?? `Item (${barcode})`,
+        imageUrl: null,
+        productNameEditable: true,
+        productIdIsBarcode: true,
+        initialPrice: result.price ?? undefined,
+      });
+    } catch {
+      // OCR failed — fall back to blank manual entry
+      rootNav.navigate('ManualPrice', {
+        productId: barcode,
+        productName: `Item (${barcode})`,
+        imageUrl: null,
+        productNameEditable: true,
+        productIdIsBarcode: true,
+      });
+    } finally {
+      setOcrLoading(false);
     }
   };
 
@@ -108,11 +170,12 @@ export function ScanScreen({ navigation }: Props) {
           <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
         </View>
       )}
-      <CameraView
+      {isFocused && <CameraView
+        ref={cameraRef}
         style={styles.camera}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8', 'code128'] }}
-        onBarcodeScanned={scanning ? undefined : ({ data }) => {
+        onBarcodeScanned={scanning || ocrLoading ? undefined : ({ data }) => {
           setScanning(true);
           handleBarcode(data).finally(() => setTimeout(() => setScanning(false), 2000));
         }}
@@ -121,11 +184,13 @@ export function ScanScreen({ navigation }: Props) {
           <View style={styles.scanFrame} />
           <Text style={styles.hint}>Point at a barcode to scan</Text>
         </View>
-      </CameraView>
-      {loading && (
+      </CameraView>}
+      {(loading || ocrLoading) && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Looking up product…</Text>
+          <Text style={styles.loadingText}>
+            {ocrLoading ? 'Reading price tag…' : 'Looking up product…'}
+          </Text>
         </View>
       )}
       {isWinco && (

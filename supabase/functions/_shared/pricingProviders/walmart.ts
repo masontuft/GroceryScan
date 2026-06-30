@@ -46,7 +46,10 @@ export class WalmartProvider implements PricingProvider {
         },
       });
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error(`Walmart API ${res.status}: ${await res.text()}`);
+        return null;
+      }
       const json = await res.json() as {
         items?: Array<{ salePrice?: number; msrp?: number }>;
       };
