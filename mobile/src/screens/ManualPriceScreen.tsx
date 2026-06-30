@@ -35,6 +35,10 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     productNameEditable = false,
     productIdIsBarcode = false,
     initialPrice,
+    initialBrand,
+    initialSize,
+    initialUnit,
+    initialCategories,
   } = route.params;
 
   const stores = useStoreStore((s) => s.stores);
@@ -50,11 +54,13 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const [customStoreName, setCustomStoreName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Optional product details
-  const [brand, setBrand] = useState('');
-  const [size, setSize] = useState('');
-  const [unit, setUnit] = useState('');
-  const [categoriesText, setCategoriesText] = useState('');  // comma-separated
+  // Optional product details — pre-filled when available from product lookup
+  const [brand, setBrand] = useState(initialBrand ?? '');
+  const [size, setSize] = useState(initialSize ?? '');
+  const [unit, setUnit] = useState(initialUnit ?? '');
+  const [categoriesText, setCategoriesText] = useState(
+    initialCategories && initialCategories.length > 0 ? initialCategories.join(', ') : ''
+  );
 
   useEffect(() => {
     if (stores.length === 0) fetchStores();
@@ -172,8 +178,8 @@ export function ManualPriceScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* ── Optional details ── */}
-        {productNameEditable && (
+        {/* ── Optional details — always show so pre-filled values from product lookup are visible ── */}
+        {(productNameEditable || brand || size || unit || categoriesText) && (
           <View style={styles.section}>
             <Text style={styles.label}>OPTIONAL DETAILS</Text>
             <View style={styles.optionalGrid}>

@@ -157,12 +157,12 @@ export async function lookupProductByBarcode(barcode: string): Promise<ScanResul
   };
 }
 
-export async function ocrPriceTag(imageBase64: string): Promise<{ price: number | null; productName: string | null; rawText: string }> {
+export async function ocrPriceTag(imageBase64: string): Promise<{ price: number | null; productName: string | null; rawText: string; extractedUpc: string | null }> {
   const { data, error } = await supabase.functions.invoke('ocr-price', {
     body: { imageBase64 },
   });
   if (error) throw error;
-  return data as { price: number | null; productName: string | null; rawText: string };
+  return data as { price: number | null; productName: string | null; rawText: string; extractedUpc: string | null };
 }
 
 export async function fetchStores(): Promise<Store[]> {

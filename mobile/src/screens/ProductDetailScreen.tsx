@@ -104,6 +104,10 @@ export function ProductDetailScreen({ route }: Props) {
                 productId: product.id,
                 productName: product.name,
                 imageUrl: product.imageUrl ?? null,
+                initialBrand: product.brand ?? undefined,
+                initialSize: product.size ?? undefined,
+                initialUnit: product.unit ?? undefined,
+                initialCategories: product.categories?.length ? product.categories : undefined,
               })
             }
             activeOpacity={0.8}

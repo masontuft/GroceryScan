@@ -5,11 +5,14 @@ import type { CameraView as CameraViewType } from 'expo-camera';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useProductStore, ProductNotFoundError } from '../stores/productStore';
+import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
 import { ocrPriceTag } from '../services/api';
+import { QuickAddSheet } from '../components/QuickAddSheet';
+import type { QuickAddData } from '../components/QuickAddSheet';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 function isWincoStore(stores: { id: string; chain: string }[], storeId: string | null) {
@@ -27,10 +30,12 @@ export function ScanScreen({ navigation }: Props) {
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [quickAdd, setQuickAdd] = useState<QuickAddData | null>(null);
   const lastScanned = useRef<string | null>(null);
   const cameraRef = useRef<CameraViewType>(null);
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
+  const addItem = useBasketStore((s) => s.addItem);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const stores = useStoreStore((s) => s.stores);
   const locationState = useLocationStore((s) => s.state);
@@ -40,12 +45,10 @@ export function ScanScreen({ navigation }: Props) {
   const isWinco = isWincoStore(stores, selectedStoreId);
   const isFocused = useIsFocused();
 
-  // Reset scan state every time this screen comes back into focus (e.g. after
-  // the ManualPrice modal is dismissed). This prevents the camera from re-firing
-  // the same barcode alert in a loop while a modal is open on top.
   useFocusEffect(useCallback(() => {
     lastScanned.current = null;
     setScanning(false);
+    setQuickAdd(null);
   }, []));
 
   const handleBarcode = async (barcode: string) => {
@@ -55,14 +58,30 @@ export function ScanScreen({ navigation }: Props) {
     try {
       const result = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       if (isWinco) {
-        // Winco has no live pricing — go straight to quick entry with the resolved product
-        rootNav.navigate('WincoEntry', { initialBarcode: barcode });
+        // Show inline quick-add sheet — product identity populated from resolve result
+        setQuickAdd({
+          barcode,
+          productName: result.product.name,
+          brand: result.product.brand,
+          categories: result.product.categories,
+          productId: result.product.id,
+          imageUrl: result.product.imageUrl,
+        });
       } else {
         navigation.navigate('ProductDetail', { scanResult: result, barcode });
       }
     } catch (err) {
-      if (err instanceof ProductNotFoundError && err.suggestions.length > 0) {
-        // Fuzzy match found — show "Did you mean?" options before manual entry
+      if (isWinco) {
+        // Show sheet even if lookup failed — user can type name + scan tag for price
+        setQuickAdd({
+          barcode,
+          productName: null,
+          brand: null,
+          categories: [],
+          productId: null,
+          imageUrl: null,
+        });
+      } else if (err instanceof ProductNotFoundError && err.suggestions.length > 0) {
         const buttons = [
           ...err.suggestions.slice(0, 3).map((s) => ({
             text: s.name,
@@ -71,20 +90,21 @@ export function ScanScreen({ navigation }: Props) {
                 const result = await resolveProduct(s.upc ?? s.barcode ?? s.id, selectedStoreId, { state: locationState, zip: locationZip });
                 navigation.navigate('ProductDetail', { scanResult: result, barcode });
               } catch {
-                // fall through to ProductDetail with no pricing
+                // fall through
               }
             },
           })),
-          { text: 'Enter Manually', style: 'cancel' as const,
+          {
+            text: 'Enter Manually',
+            style: 'cancel' as const,
             onPress: () => rootNav.navigate('ManualPrice', {
               productId: barcode, productName: `Item (${barcode})`, imageUrl: null,
               productNameEditable: true, productIdIsBarcode: true,
             }),
           },
         ];
-        Alert.alert('Did you mean?', 'We couldn\'t find that exact barcode. Is this what you\'re scanning?', buttons);
+        Alert.alert('Did you mean?', "We couldn't find that exact barcode. Is this what you're scanning?", buttons);
       } else {
-        // Product identity not found — offer OCR price tag scan or plain manual entry.
         Alert.alert(
           'Barcode Not Found',
           'Point the camera at the shelf price label to read the price automatically, or enter it manually.',
@@ -92,25 +112,15 @@ export function ScanScreen({ navigation }: Props) {
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Enter Manually',
-              onPress: () =>
-                rootNav.navigate('ManualPrice', {
-                  productId: barcode,
-                  productName: `Item (${barcode})`,
-                  imageUrl: null,
-                  productNameEditable: true,
-                  productIdIsBarcode: true,
-                }),
+              onPress: () => rootNav.navigate('ManualPrice', {
+                productId: barcode, productName: `Item (${barcode})`, imageUrl: null,
+                productNameEditable: true, productIdIsBarcode: true,
+              }),
             },
-            {
-              text: 'Scan Price Tag',
-              onPress: () => handleScanPriceTag(barcode),
-            },
+            { text: 'Scan Price Tag', onPress: () => handleScanPriceTag(barcode) },
           ]
         );
       }
-      // Do NOT reset lastScanned here — keeping it set prevents the camera from
-      // re-firing the same barcode alert every 2 seconds while the modal is open.
-      // State is cleared by useFocusEffect when this screen regains focus.
     } finally {
       setLoading(false);
     }
@@ -122,17 +132,38 @@ export function ScanScreen({ navigation }: Props) {
     try {
       const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
       if (!photo?.base64) throw new Error('No image captured');
-      const result = await ocrPriceTag(photo.base64);
+
+      // Step 1: OCR the price tag.
+      // The Vision response may include an extractedUpc parsed from shelf-label
+      // text like "G 17077-10932" (Winco format), which is more reliable than
+      // trying to scan the shelf barcode directly (often an internal item code).
+      const ocr = await ocrPriceTag(photo.base64).catch(() => ({
+        price: null, productName: null, rawText: '', extractedUpc: null,
+      }));
+
+      // Step 2: Look up the product using the best available identifier.
+      // Prefer extractedUpc from the label text; fall back to the original barcode.
+      const lookupBarcode = ocr.extractedUpc ?? barcode;
+      const scanResult = await resolveProduct(lookupBarcode, selectedStoreId, {
+        state: locationState, zip: locationZip,
+      }).catch(() => null);
+
+      // Prefer database product name/brand/categories over Vision text.
       rootNav.navigate('ManualPrice', {
-        productId: barcode,
-        productName: result.productName ?? `Item (${barcode})`,
-        imageUrl: null,
-        productNameEditable: true,
-        productIdIsBarcode: true,
-        initialPrice: result.price ?? undefined,
+        productId: scanResult?.product.id ?? lookupBarcode,
+        productName: scanResult?.product.name ?? ocr.productName ?? `Item (${barcode})`,
+        imageUrl: scanResult?.product.imageUrl ?? null,
+        productNameEditable: !scanResult?.product.name,
+        productIdIsBarcode: !scanResult?.product.id,
+        initialPrice: ocr.price ?? undefined,
+        initialBrand: scanResult?.product.brand ?? undefined,
+        initialSize: scanResult?.product.size ?? undefined,
+        initialUnit: scanResult?.product.unit ?? undefined,
+        initialCategories: scanResult?.product.categories?.length
+          ? scanResult.product.categories
+          : undefined,
       });
     } catch {
-      // OCR failed — fall back to blank manual entry
       rootNav.navigate('ManualPrice', {
         productId: barcode,
         productName: `Item (${barcode})`,
@@ -143,6 +174,68 @@ export function ScanScreen({ navigation }: Props) {
     } finally {
       setOcrLoading(false);
     }
+  };
+
+  // OCR callback used by QuickAddSheet — captures a photo, returns Vision result,
+  // and upgrades product info via extracted UPC if the sheet has no resolved product yet.
+  const handleQuickAddScanTag = async () => {
+    if (!cameraRef.current) throw new Error('No camera');
+    const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
+    if (!photo?.base64) throw new Error('No image captured');
+    const ocr = await ocrPriceTag(photo.base64);
+    // If we have an extracted UPC and the sheet hasn't resolved a product yet,
+    // do a silent lookup and upgrade the sheet's data.
+    if (ocr.extractedUpc && quickAdd && !quickAdd.productId) {
+      const upgraded = await resolveProduct(ocr.extractedUpc, selectedStoreId, {
+        state: locationState, zip: locationZip,
+      }).catch(() => null);
+      if (upgraded) {
+        setQuickAdd((prev) => prev ? {
+          ...prev,
+          productName: upgraded.product.name,
+          brand: upgraded.product.brand,
+          categories: upgraded.product.categories,
+          productId: upgraded.product.id,
+          imageUrl: upgraded.product.imageUrl,
+        } : prev);
+      }
+    }
+    return ocr;
+  };
+
+  const handleQuickAddItem = ({
+    productId,
+    name,
+    price,
+    category,
+    taxable,
+    imageUrl,
+  }: {
+    productId: string | null;
+    name: string;
+    price: number;
+    category: string;
+    taxable: boolean;
+    imageUrl: string | null;
+  }) => {
+    addItem({
+      productId: productId ?? `winco-${Date.now()}`,
+      name,
+      quantity: 1,
+      unitPrice: price,
+      appliedDiscount: 0,
+      taxable,
+      notes: null,
+      imageUrl,
+      category,
+    });
+    setQuickAdd(null);
+    lastScanned.current = null;
+  };
+
+  const handleQuickAddDismiss = () => {
+    setQuickAdd(null);
+    lastScanned.current = null;
   };
 
   const handleManualSubmit = () => {
@@ -170,21 +263,23 @@ export function ScanScreen({ navigation }: Props) {
           <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
         </View>
       )}
-      {isFocused && <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8', 'code128'] }}
-        onBarcodeScanned={scanning || ocrLoading ? undefined : ({ data }) => {
-          setScanning(true);
-          handleBarcode(data).finally(() => setTimeout(() => setScanning(false), 2000));
-        }}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.scanFrame} />
-          <Text style={styles.hint}>Point at a barcode to scan</Text>
-        </View>
-      </CameraView>}
+      {isFocused && (
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8', 'code128'] }}
+          onBarcodeScanned={scanning || ocrLoading || quickAdd !== null ? undefined : ({ data }) => {
+            setScanning(true);
+            handleBarcode(data).finally(() => setTimeout(() => setScanning(false), 2000));
+          }}
+        >
+          <View style={styles.overlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.hint}>Point at a barcode to scan</Text>
+          </View>
+        </CameraView>
+      )}
       {(loading || ocrLoading) && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
@@ -221,6 +316,24 @@ export function ScanScreen({ navigation }: Props) {
           <Text style={styles.searchBtnText}>Search</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Quick-add sheet for Winco scans */}
+      {quickAdd && (
+        <>
+          <TouchableOpacity
+            style={styles.sheetBackdrop}
+            activeOpacity={1}
+            onPress={handleQuickAddDismiss}
+            accessibilityLabel="Dismiss"
+          />
+          <QuickAddSheet
+            {...quickAdd}
+            onScanTag={handleQuickAddScanTag}
+            onAdd={handleQuickAddItem}
+            onDismiss={handleQuickAddDismiss}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -245,4 +358,5 @@ const styles = StyleSheet.create({
   offlineText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   wincoBar: { backgroundColor: '#1e40af', paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center' },
   wincoBarText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
 });
