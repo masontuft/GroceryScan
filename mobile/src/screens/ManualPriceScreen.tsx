@@ -17,7 +17,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { submitManualEntry } from '../services/api';
-import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
+import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
 import type { RootStackParamList } from '../app/index';
 
 type Props = {
@@ -58,8 +58,10 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const [brand, setBrand] = useState(initialBrand ?? '');
   const [size, setSize] = useState(initialSize ?? '');
   const [unit, setUnit] = useState(initialUnit ?? '');
-  const [categoriesText, setCategoriesText] = useState(
-    initialCategories && initialCategories.length > 0 ? initialCategories.join(', ') : ''
+  // Map the raw lookup categories (e.g. "Food, Beverages & Tobacco > ... > Yogurt")
+  // onto one of the predetermined STANDARD_CATEGORIES so tax + display are consistent.
+  const [selectedCategory, setSelectedCategory] = useState<GroceryCategory>(
+    normalizeCategory(initialCategories && initialCategories.length > 0 ? initialCategories : null)
   );
 
   useEffect(() => {
@@ -76,11 +78,6 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     if (!canAdd) return;
     setSubmitting(true);
 
-    const categories = categoriesText
-      .split(',')
-      .map((c) => c.trim().toLowerCase())
-      .filter(Boolean);
-
     try {
       const result = await submitManualEntry({
         barcode: productIdIsBarcode ? productId : undefined,
@@ -92,7 +89,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         brand: brand.trim() || null,
         size: size.trim() || null,
         unit: unit.trim() || null,
-        categories: categories.length > 0 ? categories : null,
+        categories: [selectedCategory],
       });
 
       if (isOther && result.storeId) {
@@ -102,17 +99,16 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         selectStore(pickedStoreId);
       }
 
-      const category = normalizeCategory(categories[0]);
       addItem({
         productId: result.productId,
         name: productName.trim(),
         quantity: 1,
         unitPrice: parsedPrice,
         appliedDiscount: 0,
-        taxable: !isTaxExempt(category),
+        taxable: !isTaxExempt(selectedCategory),
         notes: null,
         imageUrl: imageUrl ?? null,
-        category: category !== 'Other' ? category : (categories[0] ?? null),
+        category: selectedCategory,
       });
 
       Alert.alert('Added', `${productName.trim()} added to basket.`, [
@@ -144,20 +140,16 @@ export function ManualPriceScreen({ navigation, route }: Props) {
 
         {/* ── Product name ── */}
         <View style={styles.section}>
-          <Text style={styles.label}>ITEM NAME{productNameEditable ? '' : ''}</Text>
-          {productNameEditable ? (
-            <TextInput
-              style={styles.input}
-              value={productName}
-              onChangeText={setProductName}
-              placeholder="e.g. Great Value Whole Milk"
-              placeholderTextColor="#94a3b8"
-              returnKeyType="next"
-              selectTextOnFocus
-            />
-          ) : (
-            <Text style={styles.productName}>{productName}</Text>
-          )}
+          <Text style={styles.label}>ITEM NAME</Text>
+          <TextInput
+            style={styles.input}
+            value={productName}
+            onChangeText={setProductName}
+            placeholder="e.g. Great Value Whole Milk"
+            placeholderTextColor="#94a3b8"
+            returnKeyType="next"
+            selectTextOnFocus
+          />
         </View>
 
         {/* ── Price (required) ── */}
@@ -178,8 +170,34 @@ export function ManualPriceScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        {/* ── Category — always shown; pre-selected from the normalized lookup category ── */}
+        <View style={styles.section}>
+          <Text style={styles.label}>CATEGORY</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {STANDARD_CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.chip, selectedCategory === cat && styles.chipSelected]}
+                onPress={() => setSelectedCategory(cat)}
+                hitSlop={{ top: 10, bottom: 10 }}
+                accessibilityLabel={cat}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedCategory === cat }}
+              >
+                <Text style={[styles.chipText, selectedCategory === cat && styles.chipTextSelected]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* ── Optional details — always show so pre-filled values from product lookup are visible ── */}
-        {(productNameEditable || brand || size || unit || categoriesText) && (
+        {(productNameEditable || brand || size || unit) && (
           <View style={styles.section}>
             <Text style={styles.label}>OPTIONAL DETAILS</Text>
             <View style={styles.optionalGrid}>
@@ -216,20 +234,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
                   returnKeyType="next"
                 />
               </View>
-              <View style={styles.optionalHalf}>
-                <Text style={styles.sublabel}>Categories</Text>
-                <TextInput
-                  style={styles.input}
-                  value={categoriesText}
-                  onChangeText={setCategoriesText}
-                  placeholder="dairy, milk"
-                  placeholderTextColor="#94a3b8"
-                  returnKeyType="done"
-                  autoCapitalize="none"
-                />
-              </View>
             </View>
-            <Text style={styles.hint}>Separate categories with commas</Text>
           </View>
         )}
 
@@ -327,6 +332,33 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   optionalHalf: { width: '47%' },
+
+  chipRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingBottom: 2,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  chipSelected: {
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#475569',
+  },
+  chipTextSelected: {
+    color: '#2563eb',
+    fontWeight: '700',
+  },
 
   priceRow: {
     flexDirection: 'row',
