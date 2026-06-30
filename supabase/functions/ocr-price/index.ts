@@ -1,5 +1,54 @@
 import { corsResponse, jsonResponse, errorResponse } from '../_shared/cors.ts';
 
+// GS1 UPC-A check digit from 11-digit string (odd positions ×3, even ×1).
+function upcCheckDigit(d11: string): number {
+  let sum = 0;
+  for (let i = 0; i < 11; i++) {
+    sum += parseInt(d11[i]) * (i % 2 === 0 ? 3 : 1);
+  }
+  return (10 - (sum % 10)) % 10;
+}
+
+// Normalize OCR'd characters that are commonly misread as digits, so a noisy
+// shelf-label read still yields clean digit groups.
+function normalizeOcrDigits(s: string): string {
+  return s
+    .replace(/[Oo]/g, '0')
+    .replace(/[lI|]/g, '1')
+    .replace(/[Ss]/g, '5')
+    .replace(/[B]/g, '8');
+}
+
+// Build a 12-digit UPC-A from two 5-digit groups (company prefix + item ref).
+function buildUpcFromGroups(g1: string, g2: string): string {
+  const d11 = '0' + g1 + g2;               // 11 digits: leading 0 + company(5) + item(5)
+  return d11 + String(upcCheckDigit(d11)); // append check digit → 12-digit UPC-A
+}
+
+// Parse shelf-label "G NNNNN-NNNNN" (Winco/grocery) into a 12-digit UPC-A.
+// "G" marks a grocery item; the two 5-digit groups are company prefix + item ref.
+// Tolerant of OCR noise: variable separators (-, –, space, or none), and digits
+// misread as letters (O→0, l/I→1, S→5, B→8).
+function extractUpcFromLabel(text: string): string | null {
+  // Inspect each line; the G-code lives on its own line on grocery shelf tags.
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    // Only consider lines that carry a "G" grocery marker.
+    if (!/\bG\b/i.test(line)) continue;
+    const norm = normalizeOcrDigits(line);
+    // After normalization, find two 5-digit groups separated by anything (or nothing).
+    const m = norm.match(/(\d{5})\D{0,3}(\d{5})/);
+    if (m) return buildUpcFromGroups(m[1], m[2]);
+  }
+
+  // Fallback: scan the whole (normalized) text for a 5+5 digit pair.
+  const norm = normalizeOcrDigits(text);
+  const m = norm.match(/(\d{5})\D{0,3}(\d{5})/);
+  if (m) return buildUpcFromGroups(m[1], m[2]);
+
+  return null;
+}
+
 // Extract the most likely grocery shelf price from a Vision API text block.
 function extractPrice(text: string): number | null {
   const matches = [...text.matchAll(/\$?\s*(\d{1,3})[\s.](\d{2})\b/g)];
@@ -98,8 +147,9 @@ Deno.serve(async (req) => {
     const rawText = response?.fullTextAnnotation?.text ?? '';
     const price = extractPrice(rawText);
     const productName = extractProductName(rawText);
+    const extractedUpc = extractUpcFromLabel(rawText);
 
-    return jsonResponse({ price, productName, rawText });
+    return jsonResponse({ price, productName, rawText, extractedUpc });
   } catch (err) {
     console.error('ocr-price error:', err);
     return errorResponse('Internal error', 500);

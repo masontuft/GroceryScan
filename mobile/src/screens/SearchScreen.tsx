@@ -60,7 +60,12 @@ export function SearchScreen({ navigation }: Props) {
           onSubmitEditing={handleSearch}
           autoFocus
         />
-        <TouchableOpacity style={styles.btn} onPress={handleSearch}>
+        <TouchableOpacity
+          style={styles.btn}
+          onPress={handleSearch}
+          accessibilityLabel="Search products"
+          accessibilityRole="button"
+        >
           <Text style={styles.btnText}>Search</Text>
         </TouchableOpacity>
       </View>

@@ -1,7 +1,7 @@
 const RULES: Array<[RegExp, string]> = [
   [/(produce|fruit|vegetable|fresh\s+veg|salad|herb|lettuce|spinach|tomato|pepper|onion|garlic)/i, 'Produce'],
   [/(meat|beef|pork|lamb|chicken|turkey|poultry|seafood|fish|shrimp|lobster|crab|deli|sausage|bacon|ham)/i, 'Meat & Seafood'],
-  [/(dairy|milk|cheese|yogurt|butter|egg|cream|creamer|sour\s+cream|cottage)/i, 'Dairy & Eggs'],
+  [/(dair(y|ies)|milk|cheese|yogurt|kefir|butter|egg|cream|creamer|sour\s+cream|cottage|fermented-milk)/i, 'Dairy & Eggs'],
   [/(bak(e|ery|ed)|bread|bagel|muffin|pastry|cake|cookie|cracker|roll|bun|tortilla|pita)/i, 'Bakery & Bread'],
   [/(frozen)/i, 'Frozen'],
   [/(beverage|drink|juice|soda|water|coffee|tea|wine|beer|alcohol|spirits|energy\s+drink|sports\s+drink)/i, 'Beverages'],

@@ -7,6 +7,19 @@ import { TargetProvider } from '../_shared/pricingProviders/target.ts';
 import type { PricingProvider, StorePricingResult } from '../_shared/pricingProviders/types.ts';
 import { extractManufacturerPrefix } from '../_shared/gs1.ts';
 
+// Return the input barcode plus common numeric variants so a single-scan
+// failure doesn't permanently block product identity lookup.
+// Most common case: UPC-A scanners occasionally omit the leading zero,
+// returning 11 digits instead of 12.
+function getBarcodeVariants(barcode: string): string[] {
+  if (!/^\d+$/.test(barcode)) return [barcode]; // non-numeric (Code 128 text etc.)
+  const variants = [barcode];
+  if (barcode.length === 11) variants.push('0' + barcode);          // UPC-A missing leading 0
+  if (barcode.length === 13 && barcode.startsWith('0')) variants.push(barcode.slice(1)); // EAN-13 → UPC-A
+  if (barcode.length === 10) variants.push('0' + barcode);          // short form without check digit prefix
+  return [...new Set(variants)]; // deduplicate
+}
+
 // Domain → store chain mapping for UPCitemdb offer mining.
 // Offers from these merchants are surfaced as fallback pricing (confidence 0.65).
 const UPCITEMDB_OFFER_DOMAIN_MAP: Record<string, string> = {
@@ -44,88 +57,89 @@ Deno.serve(async (req) => {
 
   const db = getAdminClient();
 
-  // 1. Look up product in DB
+  const variants = getBarcodeVariants(barcode);
+
+  // 1. Look up product in DB — try all barcode variants in one query
   let product = null;
-  const { data: existing } = await db
-    .from('products')
-    .select('*')
-    .or(`barcode.eq.${barcode},upc.eq.${barcode},ean.eq.${barcode},gtin.eq.${barcode}`)
-    .maybeSingle();
+  const orExpr = variants
+    .flatMap((v) => [`barcode.eq.${v}`, `upc.eq.${v}`, `ean.eq.${v}`, `gtin.eq.${v}`])
+    .join(',');
+  const { data: existing } = await db.from('products').select('*').or(orExpr).maybeSingle();
 
   const upcitemdbOfferPricing: Array<{ chain: string; result: StorePricingResult }> = [];
 
   if (existing) {
     product = existing;
   } else {
-    // 2. Fall back to barcode lookup API (free trial needs no key; paid uses /v1/ + user_key header)
+    // 2. upcitemdb — try each variant until one returns a result
     const apiKey = Deno.env.get('BARCODE_LOOKUP_API_KEY');
-    {
+    for (const variant of variants) {
       try {
         const endpoint = apiKey
-          ? `https://api.upcitemdb.com/prod/v1/lookup?upc=${barcode}`
-          : `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`;
+          ? `https://api.upcitemdb.com/prod/v1/lookup?upc=${variant}`
+          : `https://api.upcitemdb.com/prod/trial/lookup?upc=${variant}`;
         const headers: Record<string, string> = { 'User-Agent': 'GroceryScan/1.0' };
         if (apiKey) { headers['user_key'] = apiKey; headers['key_type'] = 'string'; }
         const res = await fetch(endpoint, { headers });
-        if (res.ok) {
-          const json = await res.json() as { items?: Array<{
-            title?: string; brand?: string; images?: string[]; description?: string;
-            size?: string; weight?: string; category?: string;
-            offers?: Array<{ domain?: string; price?: number; list_price?: number }>;
-          }> };
-          const item = json.items?.[0];
-          if (item) {
-            const { data: inserted } = await db
-              .from('products')
-              .upsert({
-                name: item.title ?? 'Unknown Product',
-                brand: item.brand ?? null,
-                upc: barcode,
-                barcode,
-                image_url: item.images?.[0] ?? null,
-                size: item.size ?? item.weight ?? null,
-                categories: item.category ? [item.category] : [],
-                manufacturer_prefix: extractManufacturerPrefix(barcode),
-              }, { onConflict: 'upc' })
-              .select()
-              .single();
-            product = inserted;
+        if (!res.ok) continue;
+        const json = await res.json() as { items?: Array<{
+          title?: string; brand?: string; images?: string[]; description?: string;
+          size?: string; weight?: string; category?: string;
+          offers?: Array<{ domain?: string; price?: number; list_price?: number }>;
+        }> };
+        const item = json.items?.[0];
+        if (!item) continue;
 
-            // Mine UPCitemdb offers for chain-specific fallback pricing.
-            // These reflect online/catalog prices (confidence 0.65), useful for
-            // chains without a dedicated provider (Costco, WinCo, Sam's Club, etc.).
-            for (const offer of item.offers ?? []) {
-              const chain = offer.domain ? UPCITEMDB_OFFER_DOMAIN_MAP[offer.domain] : undefined;
-              if (!chain || !offer.price) continue;
-              upcitemdbOfferPricing.push({
-                chain,
-                result: {
-                  regularPrice: offer.list_price ?? offer.price,
-                  salePrice: offer.list_price && offer.price < offer.list_price ? offer.price : null,
-                  effectiveStart: null,
-                  effectiveEnd: null,
-                  confidenceScore: 0.65,
-                  source: `upcitemdb_offers:${chain}`,
-                  sourceTimestamp: new Date().toISOString(),
-                },
-              });
-            }
-          }
+        const { data: inserted, error: upsertErr } = await db
+          .from('products')
+          .upsert({
+            name: item.title ?? 'Unknown Product',
+            brand: item.brand ?? null,
+            upc: variant,
+            barcode: variant,
+            image_url: item.images?.[0] ?? null,
+            size: item.size ?? item.weight ?? null,
+            categories: item.category ? [item.category] : [],
+            manufacturer_prefix: extractManufacturerPrefix(variant),
+          }, { onConflict: 'upc' })
+          .select()
+          .single();
+        if (upsertErr) console.error('scan-resolve upcitemdb upsert error:', JSON.stringify(upsertErr));
+        product = inserted;
+
+        // Mine UPCitemdb offers for chain-specific fallback pricing.
+        for (const offer of item.offers ?? []) {
+          const chain = offer.domain ? UPCITEMDB_OFFER_DOMAIN_MAP[offer.domain] : undefined;
+          if (!chain || !offer.price) continue;
+          upcitemdbOfferPricing.push({
+            chain,
+            result: {
+              regularPrice: offer.list_price ?? offer.price,
+              salePrice: offer.list_price && offer.price < offer.list_price ? offer.price : null,
+              effectiveStart: null,
+              effectiveEnd: null,
+              confidenceScore: 0.65,
+              source: `upcitemdb_offers:${chain}`,
+              sourceTimestamp: new Date().toISOString(),
+            },
+          });
         }
+        break; // found — stop trying variants
       } catch {
-        // Continue without external lookup
+        // try next variant
       }
     }
 
-    // Open Food Facts fallback — free, no key required, 4M+ products.
-    // Used when upcitemdb also returns nothing. Adds rich product identity data.
+    // 3. Open Food Facts fallback — free, no key, 4M+ products.
+    // Try each barcode variant until one matches.
     if (!product) {
-      try {
-        const offRes = await fetch(
-          `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
-          { headers: { 'User-Agent': 'GroceryScan/1.0 (masontuft@gmail.com)' } }
-        );
-        if (offRes.ok) {
+      for (const variant of variants) {
+        try {
+          const offRes = await fetch(
+            `https://world.openfoodfacts.org/api/v2/product/${variant}.json`,
+            { headers: { 'User-Agent': 'GroceryScan/1.0 (masontuft@gmail.com)' } }
+          );
+          if (!offRes.ok) continue;
           const offJson = await offRes.json() as {
             status?: number;
             product?: {
@@ -136,31 +150,33 @@ Deno.serve(async (req) => {
               categories_tags?: string[];
             };
           };
-          if (offJson.status === 1 && offJson.product?.product_name) {
-            const p = offJson.product;
-            const categories = (p.categories_tags ?? [])
-              .map((t: string) => t.replace(/^en:/, ''))
-              .filter((t: string) => !t.includes(':'))
-              .slice(0, 3);
-            const { data: inserted } = await db
-              .from('products')
-              .upsert({
-                name: p.product_name,
-                brand: p.brands?.split(',')[0]?.trim() ?? null,
-                upc: barcode,
-                barcode,
-                image_url: p.image_url ?? null,
-                size: p.quantity ?? null,
-                categories,
-                manufacturer_prefix: extractManufacturerPrefix(barcode),
-              }, { onConflict: 'upc' })
-              .select()
-              .single();
-            product = inserted;
-          }
+          if (offJson.status !== 1 || !offJson.product?.product_name) continue;
+
+          const p = offJson.product;
+          const categories = (p.categories_tags ?? [])
+            .map((t: string) => t.replace(/^en:/, ''))
+            .filter((t: string) => !t.includes(':'))
+            .slice(0, 3);
+          const { data: inserted, error: upsertErr } = await db
+            .from('products')
+            .upsert({
+              name: p.product_name,
+              brand: p.brands?.split(',')[0]?.trim() ?? null,
+              upc: variant,
+              barcode: variant,
+              image_url: p.image_url ?? null,
+              size: p.quantity ?? null,
+              categories,
+              manufacturer_prefix: extractManufacturerPrefix(variant),
+            }, { onConflict: 'upc' })
+            .select()
+            .single();
+          if (upsertErr) console.error('scan-resolve OFF upsert error:', JSON.stringify(upsertErr));
+          product = inserted;
+          break; // found — stop trying variants
+        } catch {
+          // try next variant
         }
-      } catch {
-        // Continue — OFF unavailable
       }
     }
   }
