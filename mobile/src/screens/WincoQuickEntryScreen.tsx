@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -49,6 +50,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
   const [productName, setProductName] = useState('');
   const [priceText, setPriceText] = useState('');
   const [nameEditable, setNameEditable] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Other');
 
   const [addedEntries, setAddedEntries] = useState<AddedEntry[]>([]);
 
@@ -89,6 +91,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
       setResolvedProduct(result.product);
       setProductName(result.product.name);
       setNameEditable(false);
+      setSelectedCategory(normalizeCategory(result.product.categories));
     } catch {
       // Unknown barcode — let user type the name
       setResolvedProduct(null);
@@ -152,7 +155,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
   const handleAdd = () => {
     if (!canAdd) return;
     const name = productName.trim();
-    const category = normalizeCategory(resolvedProduct?.categories?.[0]);
+    const category = selectedCategory;
     const productId = resolvedProduct?.id ?? `winco-${Date.now()}`;
 
     addItem({
@@ -174,6 +177,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
     setProductName('');
     setPriceText('');
     setNameEditable(false);
+    setSelectedCategory('Other');
     lastScanned.current = null;
   };
 
@@ -262,6 +266,33 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
             ) : (
               <Text style={styles.resolvedName} numberOfLines={2}>{productName}</Text>
             )}
+
+            {resolvedProduct?.brand != null && (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Brand</Text>
+                <Text style={styles.metaValue}>{resolvedProduct.brand}</Text>
+              </View>
+            )}
+
+            <Text style={[styles.formLabel, { marginTop: 12 }]}>CATEGORY</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+              style={styles.chipScroll}
+            >
+              {(['Produce','Meat & Seafood','Dairy & Eggs','Bakery & Bread','Frozen','Beverages','Snacks','Pantry','Household','Personal Care','Baby','Pet','Health','Other'] as const).map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.chip, selectedCategory === cat && styles.chipSelected]}
+                  onPress={() => setSelectedCategory(cat)}
+                >
+                  <Text style={[styles.chipText, selectedCategory === cat && styles.chipTextSelected]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             <Text style={[styles.formLabel, { marginTop: 12 }]}>SHELF PRICE</Text>
             <View style={styles.priceRow}>
@@ -395,6 +426,27 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   resolvedName: { fontSize: 17, fontWeight: '700', color: '#1e293b' },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  metaLabel: { fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 },
+  metaValue: { fontSize: 13, fontWeight: '600', color: '#475569' },
+  chipScroll: { marginBottom: 4 },
+  chipRow: { gap: 6, paddingVertical: 4 },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  chipSelected: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
+  chipText: { fontSize: 12, fontWeight: '500', color: '#475569' },
+  chipTextSelected: { color: '#16a34a', fontWeight: '700' },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',

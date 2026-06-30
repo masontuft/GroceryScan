@@ -35,10 +35,13 @@ export const STANDARD_CATEGORIES = [
 
 export type GroceryCategory = (typeof STANDARD_CATEGORIES)[number];
 
-export function normalizeCategory(raw: string | null | undefined): GroceryCategory {
-  if (!raw) return 'Other';
-  for (const [pattern, label] of RULES) {
-    if (pattern.test(raw)) return label as GroceryCategory;
+export function normalizeCategory(raw: string | string[] | null | undefined): GroceryCategory {
+  const inputs = Array.isArray(raw) ? raw : [raw];
+  for (const input of inputs) {
+    if (!input) continue;
+    for (const [pattern, label] of RULES) {
+      if (pattern.test(input)) return label as GroceryCategory;
+    }
   }
   return 'Other';
 }
