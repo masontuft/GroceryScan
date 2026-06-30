@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert, FlatList } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
@@ -8,6 +8,8 @@ import { PromotionBadge } from '../components/PromotionBadge';
 import { useBasketStore } from '../stores/basketStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
+import { supabase } from '../services/api';
+import type { Product } from '../types/product';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 type Props = {
@@ -23,6 +25,37 @@ export function ProductDetailScreen({ route }: Props) {
   // useNavigation reaches the root navigator so we can open the ManualPrice modal
   // from within the nested ScanStack / SearchStack.
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const [brandProducts, setBrandProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    if (!product.manufacturerPrefix) return;
+    supabase
+      .from('products')
+      .select('id, name, brand, image_url, upc, barcode, ean, gtin, sku, size, unit, categories, manufacturer_prefix')
+      .eq('manufacturer_prefix', product.manufacturerPrefix)
+      .neq('id', product.id)
+      .limit(6)
+      .then(({ data }) => {
+        if (data) {
+          setBrandProducts(data.map((row: Record<string, unknown>) => ({
+            id: row.id as string,
+            name: row.name as string,
+            brand: row.brand as string | null,
+            barcode: row.barcode as string | null,
+            upc: row.upc as string | null,
+            ean: row.ean as string | null,
+            gtin: row.gtin as string | null,
+            sku: row.sku as string | null,
+            size: row.size as string | null,
+            unit: row.unit as string | null,
+            imageUrl: row.image_url as string | null,
+            categories: (row.categories as string[]) ?? [],
+            manufacturerPrefix: row.manufacturer_prefix as string | null ?? null,
+          })));
+        }
+      });
+  }, [product.id, product.manufacturerPrefix]);
 
   const handleAddToBasket = () => {
     if (best.price === null) {
@@ -92,6 +125,27 @@ export function ProductDetailScreen({ route }: Props) {
           Pricing from {best.source.source} · {new Date(best.source.sourceTimestamp).toLocaleString()}
         </Text>
       )}
+      {brandProducts.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>More from this brand</Text>
+          <FlatList
+            horizontal
+            data={brandProducts}
+            keyExtractor={(p) => p.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandScroll}
+            renderItem={({ item: p }) => (
+              <View style={styles.brandCard}>
+                {p.imageUrl
+                  ? <Image source={{ uri: p.imageUrl }} style={styles.brandCardImage} resizeMode="contain" />
+                  : <View style={[styles.brandCardImage, styles.brandCardImagePlaceholder]} />
+                }
+                <Text style={styles.brandCardName} numberOfLines={2}>{p.name}</Text>
+              </View>
+            )}
+          />
+        </View>
+      )}
       <TouchableOpacity style={styles.addBtn} onPress={handleAddToBasket}>
         <Text style={styles.addBtnText}>Add to Basket</Text>
       </TouchableOpacity>
@@ -122,4 +176,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   manualPriceBtnText: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  brandScroll: { gap: 10, paddingVertical: 4 },
+  brandCard: { width: 100, gap: 6 },
+  brandCardImage: { width: 100, height: 80, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  brandCardImagePlaceholder: { backgroundColor: '#e2e8f0' },
+  brandCardName: { fontSize: 11, color: '#334155', textAlign: 'center' },
 });

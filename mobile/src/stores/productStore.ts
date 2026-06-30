@@ -4,6 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { resolveBarcode, lookupProductByBarcode, type ScanResult } from '../services/api';
 import type { Product } from '../types/product';
 
+export class ProductNotFoundError extends Error {
+  suggestions: Product[];
+  constructor(suggestions: Product[]) {
+    super('UNKNOWN_BARCODE');
+    this.name = 'ProductNotFoundError';
+    this.suggestions = suggestions;
+  }
+}
+
 const PRODUCT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
 const PRICING_TTL_MS = 4 * 60 * 60 * 1000;         // 4 hours
 const PROMOTIONS_TTL_MS = 2 * 60 * 60 * 1000;      // 2 hours
@@ -24,6 +33,7 @@ interface ProductState {
   ) => Promise<ScanResult>;
   searchResults: Product[];
   evictExpired: () => void;
+  clearCache: () => void;
 }
 
 export const useProductStore = create<ProductState>()(
@@ -45,12 +55,34 @@ export const useProductStore = create<ProductState>()(
         let result: ScanResult;
         try {
           result = await resolveBarcode(barcode, storeId, location);
-        } catch {
+        } catch (err: unknown) {
           // scan-resolve returned 404 or errored. Fall back to a direct Supabase
           // products table query so manually-entered items are always found on re-scan.
           const fallback = await lookupProductByBarcode(barcode);
-          if (!fallback) throw new Error('UNKNOWN_BARCODE');
-          result = fallback;
+          if (fallback) {
+            result = fallback;
+          } else {
+            // Product no longer exists in DB — evict the stale cache entry so
+            // future scans don't serve a deleted item.
+            set((state) => {
+              const next = { ...state.cache };
+              delete next[barcode];
+              return { cache: next };
+            });
+
+            // Extract fuzzy suggestions from the 404 response body if available.
+            let suggestions: Product[] = [];
+            try {
+              const ctx = (err as { context?: Response }).context;
+              if (ctx instanceof Response) {
+                const body = await ctx.json() as { suggestions?: Product[] };
+                suggestions = body.suggestions ?? [];
+              }
+            } catch {
+              // ignore parse errors
+            }
+            throw new ProductNotFoundError(suggestions);
+          }
         }
 
         set((state) => ({
@@ -72,9 +104,11 @@ export const useProductStore = create<ProductState>()(
           return { cache: next };
         });
       },
+
+      clearCache: () => set({ cache: {} }),
     }),
     {
-      name: 'product-store',
+      name: 'product-store-v2',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ cache: s.cache }),
       skipHydration: true,

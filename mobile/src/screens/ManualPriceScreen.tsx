@@ -34,6 +34,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     imageUrl,
     productNameEditable = false,
     productIdIsBarcode = false,
+    initialPrice,
   } = route.params;
 
   const stores = useStoreStore((s) => s.stores);
@@ -44,7 +45,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
 
   // Required
   const [productName, setProductName] = useState(initialProductName);
-  const [priceText, setPriceText] = useState('');
+  const [priceText, setPriceText] = useState(initialPrice != null ? initialPrice.toFixed(2) : '');
   const [pickedStoreId, setPickedStoreId] = useState<string>(selectedStoreId ?? OTHER_STORE_ID);
   const [customStoreName, setCustomStoreName] = useState('');
   const [submitting, setSubmitting] = useState(false);

@@ -12,11 +12,7 @@ Deno.serve(async (req) => {
 
   const db = getAdminClient();
 
-  const { data, error } = await db
-    .from('products')
-    .select('*')
-    .or(`name.ilike.%${q}%,brand.ilike.%${q}%`)
-    .limit(20);
+  const { data, error } = await db.rpc('search_products_fuzzy', { query: q, threshold: 0.3 });
 
   if (error) return errorResponse(error.message, 500);
 
@@ -33,6 +29,7 @@ Deno.serve(async (req) => {
     unit: row.unit,
     imageUrl: row.image_url,
     categories: row.categories,
+    manufacturerPrefix: row.manufacturer_prefix ?? null,
   }));
 
   return jsonResponse({ products, storeId });

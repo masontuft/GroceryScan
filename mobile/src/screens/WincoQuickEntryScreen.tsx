@@ -9,8 +9,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import type { CameraView as CameraViewType } from 'expo-camera';
+import { ocrPriceTag } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -49,8 +52,12 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
 
   const [addedEntries, setAddedEntries] = useState<AddedEntry[]>([]);
 
+  const [isPriceTagMode, setIsPriceTagMode] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+
   const lastScanned = useRef<string | null>(null);
   const priceInputRef = useRef<TextInput>(null);
+  const cameraRef = useRef<CameraViewType>(null);
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const addItem = useBasketStore((s) => s.addItem);
@@ -103,6 +110,31 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
         lastScanned.current = null;
       }, 2000);
     });
+  };
+
+  const handleScanPriceTag = async () => {
+    if (!cameraRef.current || ocrLoading) return;
+    setIsPriceTagMode(true);
+    setOcrLoading(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
+      if (!photo?.base64) throw new Error('No image captured');
+      const result = await ocrPriceTag(photo.base64);
+      if (result.price !== null || result.productName !== null) {
+        if (result.price !== null) setPriceText(result.price.toFixed(2));
+        if (result.productName && nameEditable && !productName) {
+          setProductName(result.productName);
+        }
+        if (result.price !== null) setTimeout(() => priceInputRef.current?.focus(), 100);
+      } else {
+        Alert.alert('No price found', 'Couldn\'t read a price from that image. Try moving closer to the label.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to scan price tag. Please try again or enter manually.');
+    } finally {
+      setOcrLoading(false);
+      setIsPriceTagMode(false);
+    }
   };
 
   const handleManualLookup = () => {
@@ -171,17 +203,21 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
         {/* ── Camera ── */}
         <View style={styles.cameraWrapper}>
           <CameraView
+            ref={cameraRef}
             style={styles.camera}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8', 'code128'] }}
-            onBarcodeScanned={scanning ? undefined : ({ data }) => {
+            onBarcodeScanned={scanning || isPriceTagMode ? undefined : ({ data }) => {
               setScanning(true);
               handleBarcode(data);
             }}
           >
             <View style={styles.overlay}>
               <View style={styles.scanFrame} />
-              <Text style={styles.hint}>Scan shelf barcode</Text>
+              <Text style={styles.hint}>
+                {isPriceTagMode ? 'Aim at price label…' : 'Scan shelf barcode'}
+              </Text>
+              {ocrLoading && <ActivityIndicator color="#fff" />}
             </View>
           </CameraView>
           {loadingProduct && (
@@ -241,6 +277,14 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
                 returnKeyType="done"
                 onSubmitEditing={handleAdd}
               />
+              <TouchableOpacity
+                style={styles.ocrBtn}
+                onPress={handleScanPriceTag}
+                disabled={ocrLoading}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.ocrBtnText}>{ocrLoading ? '…' : '📷'}</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -363,6 +407,8 @@ const styles = StyleSheet.create({
   },
   dollarSign: { fontSize: 22, fontWeight: '600', color: '#1e293b' },
   priceInput: { flex: 1, fontSize: 28, fontWeight: '700', color: '#1e293b' },
+  ocrBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  ocrBtnText: { fontSize: 22 },
   addBtn: {
     marginTop: 14,
     backgroundColor: '#16a34a',

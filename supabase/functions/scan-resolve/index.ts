@@ -3,7 +3,9 @@ import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { KrogerProvider } from '../_shared/pricingProviders/kroger.ts';
 import { InstacartProvider } from '../_shared/pricingProviders/instacart.ts';
 import { WalmartProvider } from '../_shared/pricingProviders/walmart.ts';
+import { TargetProvider } from '../_shared/pricingProviders/target.ts';
 import type { PricingProvider, StorePricingResult } from '../_shared/pricingProviders/types.ts';
+import { extractManufacturerPrefix } from '../_shared/gs1.ts';
 
 // Domain → store chain mapping for UPCitemdb offer mining.
 // Offers from these merchants are surfaced as fallback pricing (confidence 0.65).
@@ -24,6 +26,7 @@ const providers: PricingProvider[] = [
     Deno.env.get('WALMART_CONSUMER_ID') ?? '',
     Deno.env.get('WALMART_PRIVATE_KEY') ?? '',
   ),
+  new TargetProvider(),
 ];
 
 Deno.serve(async (req) => {
@@ -82,6 +85,7 @@ Deno.serve(async (req) => {
                 image_url: item.images?.[0] ?? null,
                 size: item.size ?? item.weight ?? null,
                 categories: item.category ? [item.category] : [],
+                manufacturer_prefix: extractManufacturerPrefix(barcode),
               }, { onConflict: 'upc' })
               .select()
               .single();
@@ -112,10 +116,59 @@ Deno.serve(async (req) => {
         // Continue without external lookup
       }
     }
+
+    // Open Food Facts fallback — free, no key required, 4M+ products.
+    // Used when upcitemdb also returns nothing. Adds rich product identity data.
+    if (!product) {
+      try {
+        const offRes = await fetch(
+          `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`,
+          { headers: { 'User-Agent': 'GroceryScan/1.0 (masontuft@gmail.com)' } }
+        );
+        if (offRes.ok) {
+          const offJson = await offRes.json() as {
+            status?: number;
+            product?: {
+              product_name?: string;
+              brands?: string;
+              image_url?: string;
+              quantity?: string;
+              categories_tags?: string[];
+            };
+          };
+          if (offJson.status === 1 && offJson.product?.product_name) {
+            const p = offJson.product;
+            const categories = (p.categories_tags ?? [])
+              .map((t: string) => t.replace(/^en:/, ''))
+              .filter((t: string) => !t.includes(':'))
+              .slice(0, 3);
+            const { data: inserted } = await db
+              .from('products')
+              .upsert({
+                name: p.product_name,
+                brand: p.brands?.split(',')[0]?.trim() ?? null,
+                upc: barcode,
+                barcode,
+                image_url: p.image_url ?? null,
+                size: p.quantity ?? null,
+                categories,
+                manufacturer_prefix: extractManufacturerPrefix(barcode),
+              }, { onConflict: 'upc' })
+              .select()
+              .single();
+            product = inserted;
+          }
+        }
+      } catch {
+        // Continue — OFF unavailable
+      }
+    }
   }
 
   if (!product) {
-    return jsonResponse({ error: 'Product not found', barcode }, 404);
+    // Return fuzzy suggestions so the mobile client can show "Did you mean?"
+    const { data: suggestions } = await db.rpc('search_products_fuzzy', { query: barcode, threshold: 0.3 });
+    return jsonResponse({ error: 'Product not found', barcode, suggestions: suggestions ?? [] }, 404);
   }
 
   // 3. Fan out to pricing providers
@@ -221,6 +274,7 @@ Deno.serve(async (req) => {
       unit: product.unit,
       imageUrl: product.image_url,
       categories: product.categories ?? [],
+      manufacturerPrefix: product.manufacturer_prefix ?? null,
     },
     pricing: (allPricing ?? []).map((row: Record<string, unknown>) => ({
       id: row.id,

@@ -11,4 +11,5 @@ export interface Product {
   unit: string | null;
   imageUrl: string | null;
   categories: string[];
+  manufacturerPrefix: string | null;
 }
