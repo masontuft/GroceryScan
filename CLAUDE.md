@@ -26,6 +26,24 @@ npm run android
 
 TypeScript check: `cd mobile && npx tsc --noEmit`
 
+## EAS Builds (Android + iOS)
+
+Native builds are produced via EAS Build, config in [mobile/eas.json](mobile/eas.json). Three profiles: `development` (dev-client, iOS simulator + Android APK, for local iteration), `preview` (internal-distribution APK/IPA for ad-hoc QA), `production` (store-ready AAB/IPA, auto-incremented build number).
+
+```bash
+cd mobile
+eas login                      # one-time, your Expo account
+eas init                       # one-time, links repo to an EAS project
+
+# builds
+npm run build:android          # or build:ios / build:all
+eas build --profile development --platform ios
+```
+
+`EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` are inlined at build time, so cloud builds need them registered as EAS environment variables (not just local `.env`), one `eas env:create` per var per environment (`development`/`preview`/`production`). EAS auto-links vars to the build profile of the same name.
+
+iOS/Android app identifier: `com.masontuft.groceryscan` (`mobile/app.json` `ios.bundleIdentifier` / `android.package`). First iOS build will prompt for signing credentials — accept EAS-managed credentials unless reusing existing certs.
+
 ## Supabase / Backend
 
 ```bash
