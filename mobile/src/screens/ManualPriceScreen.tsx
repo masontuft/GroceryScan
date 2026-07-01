@@ -34,6 +34,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     imageUrl,
     productNameEditable = false,
     productIdIsBarcode = false,
+    rawBarcode,
     initialPrice,
     initialBrand,
     initialSize,
@@ -81,6 +82,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     try {
       const result = await submitManualEntry({
         barcode: productIdIsBarcode ? productId : undefined,
+        rawBarcode: productIdIsBarcode ? rawBarcode : undefined,
         productName: productIdIsBarcode ? productName.trim() : undefined,
         existingProductId: productIdIsBarcode ? null : productId,
         price: parsedPrice,

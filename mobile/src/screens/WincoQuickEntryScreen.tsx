@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraView as CameraViewType } from 'expo-camera';
-import { ocrPriceTag } from '../services/api';
+import { ocrPriceTag, submitManualEntry } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -24,6 +24,7 @@ import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { formatCurrency } from '../utils/formatCurrency';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
+import { findStorePrice, isManualPriceStale, freshnessColor } from '../utils/freshness';
 import type { RootStackParamList } from '../app/index';
 import type { Product } from '../types/product';
 
@@ -51,6 +52,8 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
   const [priceText, setPriceText] = useState('');
   const [nameEditable, setNameEditable] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('Other');
+  const [currentBarcode, setCurrentBarcode] = useState<string | null>(null);
+  const [priceHint, setPriceHint] = useState<{ text: string; color: string } | null>(null);
 
   const [addedEntries, setAddedEntries] = useState<AddedEntry[]>([]);
 
@@ -81,6 +84,8 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
     setLoadingProduct(true);
     setPriceText('');
     setResolvedProduct(null);
+    setPriceHint(null);
+    setCurrentBarcode(barcode);
 
     try {
       // We pass storeId/location for product identity; pricing will be blank for Winco
@@ -92,6 +97,22 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
       setProductName(result.product.name);
       setNameEditable(false);
       setSelectedCategory(normalizeCategory(result.product.categories));
+
+      // No pricing API for Winco — check for a previously-submitted manual
+      // price at this store so we can prefill it or ask the user to re-verify.
+      const manualRow = findStorePrice(result.pricing, selectedStoreId);
+      if (manualRow) {
+        const stale = isManualPriceStale(manualRow.sourceTimestamp);
+        const price = manualRow.salePrice ?? manualRow.regularPrice;
+        if (!stale && price != null) {
+          setPriceText(price.toFixed(2));
+          setPriceHint({ text: 'Confirm or update this price', color: freshnessColor('recent') });
+        } else {
+          setPriceHint({ text: 'Price out of date — please verify', color: freshnessColor('cached') });
+        }
+      } else {
+        setPriceHint({ text: 'No recent price — please verify', color: freshnessColor('cached') });
+      }
     } catch {
       // Unknown barcode — let user type the name
       setResolvedProduct(null);
@@ -172,12 +193,32 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
 
     setAddedEntries((prev) => [{ id: productId, name, price: parsedPrice }, ...prev]);
 
+    // Persist the price into store_pricing so it's shared/refreshed like every
+    // other chain's pricing, instead of only living in this device's basket.
+    if (selectedStoreId) {
+      submitManualEntry({
+        barcode: resolvedProduct ? undefined : (currentBarcode ?? undefined),
+        productName: resolvedProduct ? undefined : name,
+        existingProductId: resolvedProduct?.id ?? null,
+        price: parsedPrice,
+        storeId: selectedStoreId,
+        categories: [category],
+      }).catch((err) => {
+        // The basket item is already added locally, so don't block the flow —
+        // but a failed persist means the price won't be shared/refreshed for
+        // this store, so surface it loudly instead of swallowing it.
+        console.warn('[WincoQuickEntry] failed to persist price to store_pricing:', err);
+      });
+    }
+
     // Reset for next scan
     setResolvedProduct(null);
     setProductName('');
     setPriceText('');
     setNameEditable(false);
     setSelectedCategory('Other');
+    setCurrentBarcode(null);
+    setPriceHint(null);
     lastScanned.current = null;
   };
 
@@ -304,6 +345,9 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
             </ScrollView>
 
             <Text style={[styles.formLabel, { marginTop: 12 }]}>SHELF PRICE</Text>
+            {priceHint && (
+              <Text style={[styles.priceHint, { color: priceHint.color }]}>{priceHint.text}</Text>
+            )}
             <View style={styles.priceRow}>
               <Text style={styles.dollarSign}>$</Text>
               <TextInput
@@ -434,6 +478,11 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  priceHint: {
+    fontSize: 12,
+    fontWeight: '600',
     marginBottom: 6,
   },
   nameInput: {

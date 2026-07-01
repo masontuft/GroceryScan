@@ -1,4 +1,4 @@
-import type { FreshnessLabel } from '../types/pricing';
+import type { FreshnessLabel, StorePricing } from '../types/pricing';
 
 export function getFreshnessLabel(sourceTimestamp: string): FreshnessLabel {
   const ageMs = Date.now() - new Date(sourceTimestamp).getTime();
@@ -7,6 +7,24 @@ export function getFreshnessLabel(sourceTimestamp: string): FreshnessLabel {
   if (hours < 4) return 'recent';
   if (hours < 24) return 'stale';
   return 'cached';
+}
+
+// Manually-entered shelf prices (e.g. WinCo) don't change hourly like API-polled
+// prices do, so they get a much longer staleness window before we ask a user
+// to re-verify them.
+export const MANUAL_PRICE_STALE_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+export function isManualPriceStale(sourceTimestamp: string): boolean {
+  return Date.now() - new Date(sourceTimestamp).getTime() > MANUAL_PRICE_STALE_MS;
+}
+
+export function findStorePrice(
+  pricing: StorePricing[],
+  storeId: string | null,
+  source = 'manual'
+): StorePricing | null {
+  if (!storeId) return null;
+  return pricing.find((p) => p.storeId === storeId && p.source === source) ?? null;
 }
 
 export function freshnessColor(label: FreshnessLabel): string {

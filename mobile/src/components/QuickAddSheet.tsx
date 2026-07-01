@@ -11,6 +11,13 @@ import {
   Platform,
 } from 'react-native';
 import { STANDARD_CATEGORIES, normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
+import { freshnessColor } from '../utils/freshness';
+
+export interface ExistingPrice {
+  price: number;
+  sourceTimestamp: string;
+  stale: boolean;
+}
 
 export interface QuickAddData {
   barcode: string;
@@ -19,6 +26,7 @@ export interface QuickAddData {
   categories: string[];
   productId: string | null;
   imageUrl: string | null;
+  existingPrice?: ExistingPrice | null;
 }
 
 interface Props extends QuickAddData {
@@ -34,23 +42,42 @@ interface Props extends QuickAddData {
   onDismiss: () => void;
 }
 
+function relativeAge(sourceTimestamp: string): string {
+  const ms = Date.now() - new Date(sourceTimestamp).getTime();
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function QuickAddSheet({
   productName,
   brand,
   categories,
   productId,
   imageUrl,
+  existingPrice,
   onScanTag,
   onAdd,
   onDismiss,
 }: Props) {
   const [name, setName] = useState(productName ?? '');
-  const [priceText, setPriceText] = useState('');
+  const [priceText, setPriceText] = useState(
+    existingPrice && !existingPrice.stale ? existingPrice.price.toFixed(2) : ''
+  );
   const [selectedCategory, setSelectedCategory] = useState<string>(
     normalizeCategory(categories.length > 0 ? categories : null)
   );
   const [tagScanning, setTagScanning] = useState(false);
   const priceRef = useRef<TextInput>(null);
+
+  const priceHint =
+    existingPrice && !existingPrice.stale
+      ? { text: `Confirm or update — last verified ${relativeAge(existingPrice.sourceTimestamp)}`, color: freshnessColor('recent') }
+      : { text: 'No recent price — please verify', color: freshnessColor('cached') };
 
   const parsedPrice = parseFloat(priceText.replace(/[^0-9.]/g, ''));
   const priceValid = !isNaN(parsedPrice) && parsedPrice > 0;
@@ -148,6 +175,7 @@ export function QuickAddSheet({
 
         {/* Price input + OCR */}
         <Text style={[styles.sectionLabel, { marginTop: 14 }]}>SHELF PRICE</Text>
+        <Text style={[styles.priceHint, { color: priceHint.color }]}>{priceHint.text}</Text>
         <View style={styles.priceRow}>
           <Text style={styles.dollar}>$</Text>
           <TextInput
@@ -244,6 +272,11 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  priceHint: {
+    fontSize: 12,
+    fontWeight: '600',
     marginBottom: 6,
   },
   nameInput: {

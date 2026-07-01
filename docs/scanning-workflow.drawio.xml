@@ -1,0 +1,324 @@
+<mxfile host="app.diagrams.net" agent="Claude Code" version="24.0.0">
+  <diagram name="Full Scanning Workflow" id="scanning-workflow">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== TITLE & LEGEND ===================== -->
+        <mxCell id="title" value="GroceryScan — Full Scanning Workflow" style="text;html=1;fontStyle=1;fontSize=22;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="-100" width="600" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="legend1" value="Mobile App (React Native / Expo)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="-40" width="320" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legend2" value="Supabase Edge Functions (Deno)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="420" y="-40" width="320" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3" value="External APIs / Database" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="800" y="-40" width="300" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== START ===================== -->
+        <mxCell id="start" value="Start: User points camera at item / shelf barcode" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="40" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m1" value="ScanScreen.handleBarcode(barcode)&#10;(CameraView.onBarcodeScanned)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m2" value="productStore.resolveProduct(barcode, storeId, location)&#10;check AsyncStorage cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="260" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d1" value="Cache fresh?&#10;(product &lt;7d AND pricing &lt;4h)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="370" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== scan-resolve (server) ===================== -->
+        <mxCell id="e1" value="POST /scan-resolve&#10;getBarcodeVariants(barcode) — handles UPC-A/EAN-13 leading-zero forms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="480" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" value="Query products table&#10;WHERE barcode/upc/ean/gtin IN variants" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="590" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d2" value="Existing product&#10;row found?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="480" y="690" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="x1" value="Call upcitemdb API&#10;(barcode lookup)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="800" width="300" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d3" value="Item found?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="850" y="900" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="x2" value="Call Open Food Facts API&#10;(free barcode DB, no key)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="1010" width="300" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d4" value="Product found?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="850" y="1110" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" value="Return 404 + fuzzy suggestions&#10;(search_products_fuzzy RPC)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1210" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e5" value="Select-then-insert product&#10;(check upc match FIRST — plain upsert against the&#10;partial upc index silently fails; see manual-submit note)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1210" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" value="Fan out to matching PricingProviders&#10;(Kroger / Walmart / Target / Instacart) by store chain&#10;— Promise.allSettled, parallel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1330" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e7" value="Upsert store_pricing rows&#10;(onConflict: store_id, product_id, source)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1440" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" value="Load all pricing rows + active promotions&#10;for this product at this store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1550" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e9" value="Return { product, pricing[], promotions[], confidence }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1660" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== mobile: not-found branch ===================== -->
+        <mxCell id="m5" value="Resolve failed&#10;(404 / ProductNotFoundError)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1330" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d5" value="Selected store&#10;is WinCo?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="1430" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m6" value="Show QuickAddSheet (blank)&#10;— no product match, user types name" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2510" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d6" value="Fuzzy suggestions&#10;available?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="1560" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m7" value="'Did you mean?' alert&#10;pick a suggestion (retries resolve) or Enter Manually" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1690" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m8" value="'Barcode Not Found' alert&#10;(shows the scanned code)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1800" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d7" value="User choice" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="1890" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e10" value="POST /ocr-price&#10;Google Vision TEXT_DETECTION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="2010" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e11" value="Extract price / productName / extractedUpc&#10;(&quot;G NNNNN-NNNNN&quot; shelf-tag text → reconstructed UPC via check-digit math)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="2120" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m10" value="resolveProduct(extractedUpc ?? barcode) retry&#10;— NOTE: extractedUpc is the true manufacturer UPC and can&#10;differ from the raw code the camera itself scans" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2230" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m11" value="Navigate ManualPriceScreen&#10;(prefilled name/price/brand; rawBarcode = original&#10;camera-scanned code, kept separately from the OCR UPC)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2350" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== mobile: success branch ===================== -->
+        <mxCell id="m13" value="Resolve succeeded — ScanResult cached&#10;in AsyncStorage (productStore)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1800" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d8" value="Selected store&#10;is WinCo?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="1900" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m14" value="Show QuickAddSheet&#10;lookup existing manual price via findStorePrice()&#10;+ isManualPriceStale() (3-day threshold) → prefill or &quot;verify&quot; hint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2020" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m15" value="Navigate ProductDetailScreen&#10;selectBestPrice(): rank by confidence → freshness → price" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="2020" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m16" value="User taps Add to Basket&#10;(price already resolved, no manual entry needed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="2130" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== merge: price entry UI ===================== -->
+        <mxCell id="m9" value="Price Entry UI&#10;(QuickAddSheet / WincoQuickEntryScreen / ManualPriceScreen)&#10;user fills or confirms name, price, category, store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2620" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m17" value="User taps Add to Basket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2730" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m18" value="addItem() → basketStore&#10;(Zustand + AsyncStorage, persists indefinitely)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2810" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e12" value="submitManualEntry() → POST /manual-submit&#10;(best-effort — basket item already added locally)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="2810" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e13" value="Create custom store row&#10;if customStoreName was given" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="2920" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d9" value="existingProductId&#10;still exists in DB?&#10;(defensive check)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="480" y="3030" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d10" value="barcode + productName&#10;provided as fallback?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="3030" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e14" value="Return error:&#10;&quot;please re-scan the item&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="3180" width="300" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e15" value="Find-or-create product&#10;(select-then-insert by upc;&#10;barcode column = rawBarcode ?? barcode)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="3180" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e16" value="Upsert store_pricing&#10;(source='manual', confidence_score=1.0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="3290" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e17" value="Return { productId, storeId }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="3400" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m19" value="console.warn on failure&#10;(non-blocking — basket item stays added locally)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="3400" width="300" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m20" value="Item visible in Basket&#10;('Added' confirmation shown)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="3510" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== checkout / basket-recalculate ===================== -->
+        <mxCell id="m21" value="Basket screen — user taps Checkout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="3620" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m22" value="recalculateBasket(storeId, items, location)&#10;→ POST /basket-recalculate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="3720" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e18" value="Load store_pricing for all basket&#10;items at the selected store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="3720" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e19" value="Pick best price per item (lowest);&#10;apply active, time-bound promotions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="3830" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e20" value="Compute tax&#10;(bundled taxRates.json, by state + city override)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="3940" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e21" value="Return totals&#10;(subtotal, discounts, tax, total)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="4050" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="end" value="End: Checkout total displayed to user" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="4160" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EDGES ===================== -->
+        <mxCell id="e-s-m1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="start" target="m1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m1-m2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m1" target="m2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m2-d1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m2" target="d1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-d1-e1" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d1" target="e1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d1-m13" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="d1" target="m13"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e1-e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e1" target="e2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e2-d2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e2" target="d2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d2-e6" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d2" target="e6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d2-x1" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d2" target="x1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-x1-d3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="x1" target="d3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d3-e5" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d3" target="e5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d3-x2" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d3" target="x2"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-x2-d4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="x2" target="d4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d4-e5" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d4" target="e5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d4-e3" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d4" target="e3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e3-m5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e3" target="m5"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e5-e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e5" target="e6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e6-e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e6" target="e7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e7-e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e7" target="e8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e8-e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e8" target="e9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e9-m13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e9" target="m13"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-m5-d5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m5" target="d5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d5-m6" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d5" target="m6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d5-d6" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d5" target="d6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-d6-m7" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d6" target="m7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d6-m8" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d6" target="m8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m7-m9" value="Enter Manually" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=0;entryY=0;" edge="1" parent="1" source="m7" target="m9"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-m8-d7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m8" target="d7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d7-m10" value="Scan Price Tag" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="d7" target="e10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d7-m9" value="Enter Manually" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=0;entryY=0;" edge="1" parent="1" source="d7" target="m9"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e10-e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e10" target="e11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e11-m10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e11" target="m10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m10-m11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m10" target="m11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m11-m9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m11" target="m9"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-m13-d8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m13" target="d8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d8-m14" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d8" target="m14"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d8-m15" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="d8" target="m15"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-m14-m9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m14" target="m9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m15-m16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m15" target="m16"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m16-m20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.3;" edge="1" parent="1" source="m16" target="m20"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-m9-m17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m9" target="m17"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m17-m18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m17" target="m18"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m17-e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m17" target="e12"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m18-m20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m18" target="m20"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e12-e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e12" target="e13"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e13-d9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e13" target="d9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d9-e15" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="d9" target="e15"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d9-d10" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d9" target="d10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d10-e15" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.3;" edge="1" parent="1" source="d10" target="e15"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-d10-e14" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d10" target="e14"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e14-m19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e14" target="m19"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m19-m20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.7;" edge="1" parent="1" source="m19" target="m20"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-e15-e16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e15" target="e16"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e16-e17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e16" target="e17"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e17-m20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="e17" target="m20"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-m20-m21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m20" target="m21"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m21-m22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m21" target="m22"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-m22-e18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="m22" target="e18"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e18-e19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e18" target="e19"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e19-e20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e19" target="e20"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e20-e21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="e20" target="e21"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-e21-end" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="e21" target="end"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

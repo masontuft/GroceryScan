@@ -90,22 +90,32 @@ Deno.serve(async (req) => {
         const item = json.items?.[0];
         if (!item) continue;
 
-        const { data: inserted, error: upsertErr } = await db
-          .from('products')
-          .upsert({
-            name: item.title ?? 'Unknown Product',
-            brand: item.brand ?? null,
-            upc: variant,
-            barcode: variant,
-            image_url: item.images?.[0] ?? null,
-            size: item.size ?? item.weight ?? null,
-            categories: item.category ? [item.category] : [],
-            manufacturer_prefix: extractManufacturerPrefix(variant),
-          }, { onConflict: 'upc' })
-          .select()
-          .single();
-        if (upsertErr) console.error('scan-resolve upcitemdb upsert error:', JSON.stringify(upsertErr));
-        product = inserted;
+        // Select-then-insert rather than upsert: the unique index on `upc` is a
+        // partial index (WHERE upc IS NOT NULL), which PostgreSQL cannot use as
+        // an ON CONFLICT arbiter — a plain upsert would always attempt an insert
+        // and fail whenever a row with this upc already exists (see the same
+        // note in manual-submit/index.ts).
+        const { data: existingByUpc } = await db.from('products').select('*').eq('upc', variant).maybeSingle();
+        if (existingByUpc) {
+          product = existingByUpc;
+        } else {
+          const { data: inserted, error: insertErr } = await db
+            .from('products')
+            .insert({
+              name: item.title ?? 'Unknown Product',
+              brand: item.brand ?? null,
+              upc: variant,
+              barcode: variant,
+              image_url: item.images?.[0] ?? null,
+              size: item.size ?? item.weight ?? null,
+              categories: item.category ? [item.category] : [],
+              manufacturer_prefix: extractManufacturerPrefix(variant),
+            })
+            .select()
+            .single();
+          if (insertErr) console.error('scan-resolve upcitemdb insert error:', JSON.stringify(insertErr));
+          product = inserted;
+        }
 
         // Mine UPCitemdb offers for chain-specific fallback pricing.
         for (const offer of item.offers ?? []) {
@@ -157,22 +167,29 @@ Deno.serve(async (req) => {
             .map((t: string) => t.replace(/^en:/, ''))
             .filter((t: string) => !t.includes(':'))
             .slice(0, 3);
-          const { data: inserted, error: upsertErr } = await db
-            .from('products')
-            .upsert({
-              name: p.product_name,
-              brand: p.brands?.split(',')[0]?.trim() ?? null,
-              upc: variant,
-              barcode: variant,
-              image_url: p.image_url ?? null,
-              size: p.quantity ?? null,
-              categories,
-              manufacturer_prefix: extractManufacturerPrefix(variant),
-            }, { onConflict: 'upc' })
-            .select()
-            .single();
-          if (upsertErr) console.error('scan-resolve OFF upsert error:', JSON.stringify(upsertErr));
-          product = inserted;
+          // Select-then-insert — see the upcitemdb block above for why a plain
+          // upsert against the partial `upc` unique index isn't safe here.
+          const { data: existingByUpc } = await db.from('products').select('*').eq('upc', variant).maybeSingle();
+          if (existingByUpc) {
+            product = existingByUpc;
+          } else {
+            const { data: inserted, error: insertErr } = await db
+              .from('products')
+              .insert({
+                name: p.product_name,
+                brand: p.brands?.split(',')[0]?.trim() ?? null,
+                upc: variant,
+                barcode: variant,
+                image_url: p.image_url ?? null,
+                size: p.quantity ?? null,
+                categories,
+                manufacturer_prefix: extractManufacturerPrefix(variant),
+              })
+              .select()
+              .single();
+            if (insertErr) console.error('scan-resolve OFF insert error:', JSON.stringify(insertErr));
+            product = inserted;
+          }
           break; // found — stop trying variants
         } catch {
           // try next variant
