@@ -70,6 +70,7 @@ export async function searchProducts(q: string, _storeId: string | null): Promis
 
 export async function submitManualEntry(args: {
   barcode?: string;
+  rawBarcode?: string;
   productName?: string;
   price: number;
   storeId?: string | null;

@@ -33,6 +33,7 @@ Deno.serve(async (req) => {
 async function handleRequest(req: Request) {
   let body: {
     barcode?: string;
+    rawBarcode?: string;
     productName?: string;
     price?: number;
     storeId?: string | null;
@@ -50,7 +51,7 @@ async function handleRequest(req: Request) {
     return errorResponse('Invalid JSON body');
   }
 
-  const { barcode, productName, price, customStoreName, existingProductId, brand, size, unit, categories } = body;
+  const { barcode, rawBarcode, productName, price, customStoreName, existingProductId, brand, size, unit, categories } = body;
   let { storeId } = body;
 
   if (!price || price <= 0) return errorResponse('price is required and must be > 0');
@@ -82,7 +83,19 @@ async function handleRequest(req: Request) {
   // and fail on duplicate barcodes.
   let productId = existingProductId ?? null;
 
+  if (productId) {
+    // Guard against a stale client-cached product id (e.g. the client resolved
+    // this product in an earlier session and the row was since deleted, or was
+    // never actually persisted due to a scan-resolve upsert failure) — using a
+    // dangling id here would trip the store_pricing foreign key below.
+    const { data: stillExists } = await db.from('products').select('id').eq('id', productId).maybeSingle();
+    if (!stillExists) productId = null;
+  }
+
   if (!productId) {
+    if (existingProductId && (!barcode || !productName)) {
+      return errorResponse('The referenced product no longer exists — please re-scan the item and try again.');
+    }
     // Check if the barcode is already in the DB (e.g. user scans the same unknown
     // item twice and enters it manually both times).
     const { data: existing } = await db
@@ -108,7 +121,11 @@ async function handleRequest(req: Request) {
         .insert({
           name: productName!.trim(),
           upc: barcode,
-          barcode,
+          // `barcode` may have been reconstructed from OCR'd shelf-tag text and
+          // can differ from what the camera reads directly off the item — store
+          // the raw scanned code separately so a future direct re-scan still
+          // resolves via the `barcode` column (see scan-resolve's OR lookup).
+          barcode: rawBarcode ?? barcode,
           brand: brand?.trim() ?? null,
           size: size?.trim() ?? null,
           unit: unit?.trim() ?? null,

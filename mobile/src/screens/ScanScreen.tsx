@@ -10,9 +10,10 @@ import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
-import { ocrPriceTag } from '../services/api';
+import { ocrPriceTag, submitManualEntry } from '../services/api';
 import { QuickAddSheet } from '../components/QuickAddSheet';
 import type { QuickAddData } from '../components/QuickAddSheet';
+import { findStorePrice, isManualPriceStale } from '../utils/freshness';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 function isWincoStore(stores: { id: string; chain: string }[], storeId: string | null) {
@@ -59,6 +60,7 @@ export function ScanScreen({ navigation }: Props) {
       const result = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       if (isWinco) {
         // Show inline quick-add sheet — product identity populated from resolve result
+        const manualRow = findStorePrice(result.pricing, selectedStoreId);
         setQuickAdd({
           barcode,
           productName: result.product.name,
@@ -66,6 +68,13 @@ export function ScanScreen({ navigation }: Props) {
           categories: result.product.categories,
           productId: result.product.id,
           imageUrl: result.product.imageUrl,
+          existingPrice: manualRow
+            ? {
+                price: manualRow.salePrice ?? manualRow.regularPrice ?? 0,
+                sourceTimestamp: manualRow.sourceTimestamp,
+                stale: isManualPriceStale(manualRow.sourceTimestamp),
+              }
+            : null,
         });
       } else {
         navigation.navigate('ProductDetail', { scanResult: result, barcode });
@@ -107,7 +116,7 @@ export function ScanScreen({ navigation }: Props) {
       } else {
         Alert.alert(
           'Barcode Not Found',
-          'Point the camera at the shelf price label to read the price automatically, or enter it manually.',
+          `Scanned: ${barcode}\n\nPoint the camera at the shelf price label to read the price automatically, or enter it manually.`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -155,6 +164,10 @@ export function ScanScreen({ navigation }: Props) {
         imageUrl: scanResult?.product.imageUrl ?? null,
         productNameEditable: !scanResult?.product.name,
         productIdIsBarcode: !scanResult?.product.id,
+        // The raw code the camera read off the item itself — may differ from
+        // lookupBarcode when it was reconstructed from OCR'd shelf-tag text.
+        // Kept so a future direct re-scan of this same item still resolves.
+        rawBarcode: !scanResult?.product.id ? barcode : undefined,
         initialPrice: ocr.price ?? undefined,
         initialBrand: scanResult?.product.brand ?? undefined,
         initialSize: scanResult?.product.size ?? undefined,
@@ -229,6 +242,25 @@ export function ScanScreen({ navigation }: Props) {
       imageUrl,
       category,
     });
+
+    // Persist the price into store_pricing so it's shared/refreshed like every
+    // other chain's pricing, instead of only living in this device's basket.
+    if (selectedStoreId && quickAdd) {
+      submitManualEntry({
+        barcode: productId ? undefined : quickAdd.barcode,
+        productName: productId ? undefined : name,
+        existingProductId: productId,
+        price,
+        storeId: selectedStoreId,
+        categories: [category],
+      }).catch((err) => {
+        // The basket item is already added locally, so don't block the flow —
+        // but a failed persist means the price won't be shared/refreshed for
+        // this store, so surface it loudly instead of swallowing it.
+        console.warn('[ScanScreen] failed to persist Winco price to store_pricing:', err);
+      });
+    }
+
     setQuickAdd(null);
     lastScanned.current = null;
   };

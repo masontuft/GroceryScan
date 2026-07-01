@@ -43,6 +43,7 @@ export type RootStackParamList = {
     imageUrl: string | null;
     productNameEditable?: boolean;   // true → came from "Not Found"; show editable name field
     productIdIsBarcode?: boolean;    // true → productId is a raw barcode, must upsert product in DB
+    rawBarcode?: string;             // the actual camera-scanned code, when productId is an OCR-reconstructed UPC that may differ from it
     initialPrice?: number;           // pre-fill from OCR
     initialBrand?: string;           // pre-fill from product lookup
     initialSize?: string;
