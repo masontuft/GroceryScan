@@ -34,13 +34,14 @@
     "typescript": "~5.9.2"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start": "EXPO_NO_REDIRECT_PAGE=1 expo start --go",
+    "android": "EXPO_NO_REDIRECT_PAGE=1 expo start --go --android",
+    "ios": "EXPO_NO_REDIRECT_PAGE=1 expo start --go --ios",
     "web": "expo start --web",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
-    "build:all": "eas build --platform all"
+    "build:all": "eas build --platform all",
+    "postinstall": "node -e \"if (process.platform === 'darwin') require('child_process').execSync('xattr -w com.apple.fileprovider.ignore#P 1 node_modules')\""
   },
   "private": true
 }

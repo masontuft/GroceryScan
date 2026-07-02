@@ -27,6 +27,18 @@ export function findStorePrice(
   return pricing.find((p) => p.storeId === storeId && p.source === source) ?? null;
 }
 
+/**
+ * Whether a displayed price should be flagged as potentially outdated.
+ * Manual (shelf-verified) prices use their own 3-day window since they don't
+ * change hourly like API-polled prices; everything else falls back to the
+ * live/recent/stale/cached freshness scale.
+ */
+export function isPriceStale(source: StorePricing | null, freshnessLabel: FreshnessLabel): boolean {
+  if (!source) return false;
+  if (source.source === 'manual') return isManualPriceStale(source.sourceTimestamp);
+  return freshnessLabel === 'stale' || freshnessLabel === 'cached';
+}
+
 export function freshnessColor(label: FreshnessLabel): string {
   switch (label) {
     case 'live': return '#22c55e';

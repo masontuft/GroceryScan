@@ -6,9 +6,11 @@ import { useNavigation } from '@react-navigation/native';
 import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
 import { useBasketStore } from '../stores/basketStore';
+import { useStoreStore } from '../stores/storeStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
-import { supabase } from '../services/api';
+import { isPriceStale } from '../utils/freshness';
+import { supabase, submitManualEntry } from '../services/api';
 import type { Product } from '../types/product';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
@@ -20,8 +22,17 @@ type Props = {
 export function ProductDetailScreen({ route }: Props) {
   const { scanResult } = route.params;
   const { product, pricing, promotions } = scanResult;
-  const best = selectBestPrice(pricing);
+  const computedBest = selectBestPrice(pricing);
   const addItem = useBasketStore((s) => s.addItem);
+  const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
+
+  // Locally overrides the displayed price after an inline edit is saved, so the
+  // screen reflects the correction immediately without re-fetching scanResult.
+  const [priceOverride, setPriceOverride] = useState<number | null>(null);
+  const best = priceOverride !== null
+    ? { ...computedBest, price: priceOverride, isOnSale: false, freshnessLabel: 'live' as const }
+    : computedBest;
+  const stale = priceOverride === null && isPriceStale(computedBest.source, computedBest.freshnessLabel);
   // useNavigation reaches the root navigator so we can open the ManualPrice modal
   // from within the nested ScanStack / SearchStack.
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -56,6 +67,21 @@ export function ProductDetailScreen({ route }: Props) {
         }
       });
   }, [product.id, product.manufacturerPrefix]);
+
+  const handleSavePrice = async (newPrice: number) => {
+    const storeId = computedBest.source?.storeId ?? selectedStoreId;
+    if (!storeId) {
+      Alert.alert('No store selected', 'Pick a store from the Basket tab before updating a price.');
+      return;
+    }
+    try {
+      await submitManualEntry({ existingProductId: product.id, price: newPrice, storeId });
+      setPriceOverride(newPrice);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      Alert.alert('Error', `Could not save price: ${message}`);
+    }
+  };
 
   const handleAddToBasket = () => {
     if (best.price === null) {
@@ -95,6 +121,8 @@ export function ProductDetailScreen({ route }: Props) {
           regularPrice={best.regularPrice}
           isOnSale={best.isOnSale}
           freshnessLabel={best.freshnessLabel}
+          isStale={stale}
+          onSave={best.price !== null ? handleSavePrice : undefined}
         />
         {best.price === null && (
           <TouchableOpacity
