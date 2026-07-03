@@ -7,7 +7,17 @@ import type { BasketItem, BasketTotal } from '../types/basket';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const isSupabaseConfigured = SUPABASE_URL.length > 0 && SUPABASE_ANON_KEY.length > 0;
+
+// createClient throws synchronously on an empty URL. Since this module loads
+// before React mounts, that throw would kill the JS bundle before the splash
+// screen's auto-hide ever fires, freezing the app on the native splash with
+// no visible error. Fall back to a placeholder so the module always loads;
+// isSupabaseConfigured gates whether the app renders a real error screen instead.
+export const supabase = createClient(
+  isSupabaseConfigured ? SUPABASE_URL : 'https://placeholder.invalid',
+  isSupabaseConfigured ? SUPABASE_ANON_KEY : 'placeholder-anon-key'
+);
 
 export interface ScanResult {
   product: Product;
