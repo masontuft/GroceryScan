@@ -40,8 +40,7 @@
     "web": "expo start --web",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
-    "build:all": "eas build --platform all",
-    "postinstall": "node -e \"if (process.platform === 'darwin') require('child_process').execSync('xattr -w com.apple.fileprovider.ignore#P 1 node_modules')\""
+    "build:all": "eas build --platform all"
   },
   "private": true
 }
