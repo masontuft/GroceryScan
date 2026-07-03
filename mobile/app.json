@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Grocery Scanner",
-    "slug": "mobile",
+    "slug": "groceryscan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/icon.png"
@@ -35,6 +38,12 @@
           "backgroundColor": "#2A383F"
         }
       ]
-    ]
+    ],
+    "owner": "masson",
+    "extra": {
+      "eas": {
+        "projectId": "3dfa4ab1-9846-4be6-9013-b64a650a29fd"
+      }
+    }
   }
 }
