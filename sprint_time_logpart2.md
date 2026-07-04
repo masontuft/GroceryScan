@@ -26,14 +26,6 @@ The expected minimum amount of time each Sprint for each category is as follows:
 
 |Date      |Start Time|Category|Description                                 |Total Minutes|
 |----------|----------|:------:|--------------------------------------------|:-----------:|
-|6/8/2026  |9:00 AM   |IM      |Set up Expo managed workflow with TypeScript; configured project structure and tsconfig|90|
-|6/8/2026  |2:00 PM   |IM      |Defined TypeScript interfaces for Product, BasketItem, StorePricing, and Promotion types|60|
-|6/9/2026  |2:00 PM   |IM      |Implemented KrogerProvider class with OAuth token management and typed fetchPrice method|90|
-|6/11/2026 |9:00 AM   |IM      |Built Zustand stores (basketStore, productStore, locationStore) with fully typed state and actions|90|
-|6/13/2026 |1:00 PM   |IM      |Added WalmartProvider and UPCitemdb barcode lookup integration|75|
-|6/15/2026 |10:00 AM  |IM      |Resolved Expo SDK 54 / React 19 compatibility issues; fixed getSnapshot infinite loop|60|
-|6/17/2026 |9:00 AM   |IM      |Implemented manual price entry screen and basket total calculation logic|75|
-|6/19/2026 |10:00 AM  |IM      |Added TypeScript tuple types (Coordinate, LocationPermissionTuple, getPriceRange) to satisfy module requirements|60|
 |6/25/2026 |11:00 AM  |IM      |Implemented auto-categorization engine, WinCo quick-entry flow, Quick Add tab, and basket spending analysis|105|
 |6/30/2026 |9:00 AM   |IM      |Added OCR price-tag fallback scanning, developer diagnostics screen, and camera focus guard|90|
 |6/30/2026 |11:00 AM  |IM      |Built category chip selector with multi-category normalization; improved touch targets and accessibility labels; added Clear Basket confirmation|90|
