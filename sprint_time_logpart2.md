@@ -1,8 +1,8 @@
 # CSE 310 - Sprint Time Log
 
-Name:
+Name: Mason Tuft
 
-Sprint #:
+Sprint #: 5
 
 ## Instructions
 
