@@ -13,7 +13,7 @@ Steps to build and/or run the software:
 1. Clone the repo and install mobile dependencies: `cd mobile && npm install`
 2. Copy the environment file and fill in your Supabase project URL and anon key: `cp mobile/.env.example mobile/.env`
 3. Start a local Supabase instance and apply migrations: `supabase start && supabase db push && supabase db seed`
-4. Set required API secrets: `supabase secrets set BARCODE_LOOKUP_API_KEY=... KROGER_CLIENT_ID=... KROGER_CLIENT_SECRET=... INSTACART_API_KEY=... WALMART_CONSUMER_ID=... WALMART_PRIVATE_KEY=...`
+4. Set required API secrets: `supabase secrets set BARCODE_LOOKUP_API_KEY=... KROGER_CLIENT_ID=... KROGER_CLIENT_SECRET=... INSTACART_API_KEY=... SERPAPI_KEY=... WALMART_CONSUMER_ID=... WALMART_PRIVATE_KEY=...`
 5. Deploy the edge functions: `supabase functions deploy scan-resolve basket-recalculate products-search stores-list manual-submit`
 6. Start the Expo dev server: `cd mobile && npm start`
 
