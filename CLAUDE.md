@@ -11,7 +11,7 @@ GroceryScan is a React Native + TypeScript mobile app that scans grocery barcode
 - **Mobile**: Expo (managed workflow), TypeScript, React Navigation, Zustand
 - **Backend**: Supabase — Postgres DB + Deno Edge Functions (no separate server)
 - **Barcode identity**: upcitemdb.com API (set `BARCODE_LOOKUP_API_KEY`)
-- **Pricing**: Kroger API + Instacart Connect API via a `PricingProvider` abstraction layer
+- **Pricing**: Kroger API, Instacart Connect API, SerpApi (Walmart), Walmart Marketplace API, and Target's Redsky API via a `PricingProvider` abstraction layer
 - **Tax**: Static JSON bundled in app ([mobile/src/constants/taxRates.json](mobile/src/constants/taxRates.json))
 
 ## Running the App
@@ -55,6 +55,8 @@ supabase db push
 supabase secrets set BARCODE_LOOKUP_API_KEY=...
 supabase secrets set KROGER_CLIENT_ID=... KROGER_CLIENT_SECRET=...
 supabase secrets set INSTACART_API_KEY=...
+supabase secrets set SERPAPI_KEY=...
+supabase secrets set WALMART_CONSUMER_ID=... WALMART_PRIVATE_KEY=...
 
 # Deploy edge functions
 supabase functions deploy scan-resolve
@@ -76,7 +78,7 @@ supabase db seed
 - `products-search` — full-text search on products table
 - `stores-list` — active stores
 
-**Pricing abstraction** (`supabase/functions/_shared/pricingProviders/`): `PricingProvider` interface with `KrogerProvider` and `InstacartProvider`. Add new chains by creating a new file + adding to the registry array in `scan-resolve/index.ts`.
+**Pricing abstraction** (`supabase/functions/_shared/pricingProviders/`): `PricingProvider` interface with `KrogerProvider`, `InstacartProvider`, `SerpApiWalmartProvider`, `WalmartProvider`, and `TargetProvider`. Multiple providers can match the same store chain (e.g. Walmart has both `SerpApiWalmartProvider` and the direct-by-UPC `WalmartProvider`) — all matching providers run in parallel per scan, and `selectBestPrice.ts` picks the winner by `confidenceScore`, so provider priority is expressed by which one is scored higher rather than by registry order. Add new chains by creating a new file + adding to the registry array in `scan-resolve/index.ts`.
 
 ## Key Files
 

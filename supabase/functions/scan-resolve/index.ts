@@ -3,6 +3,7 @@ import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { KrogerProvider } from '../_shared/pricingProviders/kroger.ts';
 import { InstacartProvider } from '../_shared/pricingProviders/instacart.ts';
 import { WalmartProvider } from '../_shared/pricingProviders/walmart.ts';
+import { SerpApiWalmartProvider } from '../_shared/pricingProviders/serpApiWalmart.ts';
 import { TargetProvider } from '../_shared/pricingProviders/target.ts';
 import type { PricingProvider, StorePricingResult } from '../_shared/pricingProviders/types.ts';
 import { extractManufacturerPrefix } from '../_shared/gs1.ts';
@@ -35,6 +36,9 @@ const providers: PricingProvider[] = [
     Deno.env.get('KROGER_CLIENT_SECRET') ?? '',
   ),
   new InstacartProvider(Deno.env.get('INSTACART_API_KEY') ?? ''),
+  // Primary Walmart source — see serpApiWalmart.ts for why this outranks
+  // the direct-by-UPC Marketplace API below via confidenceScore.
+  new SerpApiWalmartProvider(Deno.env.get('SERPAPI_KEY') ?? ''),
   new WalmartProvider(
     Deno.env.get('WALMART_CONSUMER_ID') ?? '',
     Deno.env.get('WALMART_PRIVATE_KEY') ?? '',
