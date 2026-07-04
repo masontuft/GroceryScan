@@ -30,7 +30,12 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
-      "expo-barcode-scanner",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan grocery barcodes."
+        }
+      ],
       "expo-dev-client",
       [
         "expo-splash-screen",
