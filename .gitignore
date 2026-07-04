@@ -4,6 +4,7 @@
 supabase/.env
 supabase/.env.example
 mobile/.env
+mobile/.env.eas
 
 # Dependencies
 node_modules/
