@@ -34,6 +34,14 @@ The expected minimum amount of time each Sprint for each category is as follows:
 |6/15/2026 |10:00 AM  |IM      |Resolved Expo SDK 54 / React 19 compatibility issues; fixed getSnapshot infinite loop|60|
 |6/17/2026 |9:00 AM   |IM      |Implemented manual price entry screen and basket total calculation logic|75|
 |6/19/2026 |10:00 AM  |IM      |Added TypeScript tuple types (Coordinate, LocationPermissionTuple, getPriceRange) to satisfy module requirements|60|
+|6/25/2026 |11:00 AM  |IM      |Implemented auto-categorization engine, WinCo quick-entry flow, Quick Add tab, and basket spending analysis|105|
+|6/30/2026 |9:00 AM   |IM      |Added OCR price-tag fallback scanning, developer diagnostics screen, and camera focus guard|90|
+|6/30/2026 |11:00 AM  |IM      |Built category chip selector with multi-category normalization; improved touch targets and accessibility labels; added Clear Basket confirmation|90|
+|6/30/2026 |2:00 PM   |IM      |Fixed OCR shelf-tag UPC resolution end-to-end; normalized lookup categories to chips and made item name editable|75|
+|6/30/2026 |8:00 PM   |IM      |Hardened WinCo pricing persistence, fixed product-identity bugs, and set up EAS Build configuration for iOS and Android|90|
+|7/1/2026  |6:00 AM   |IM      |Rebranded app icon, splash screen, and adaptive icon layers|45|
+|7/2/2026  |4:00 PM   |IM      |Added inline editing for stale prices, fixed Expo Go dev startup issue, added marketing splash graphic, and reverted iCloud xattr postinstall hook|90|
+|7/3/2026  |3:00 PM   |IM      |Renamed EAS project slug, fixed react-native-worklets version for iOS pod install, migrated off expo-barcode-scanner to expo-camera, and prevented silent splash-screen freeze when Supabase env vars are missing|90|
 
 _Note: Add more rows as needed._
 
@@ -41,7 +49,7 @@ _Note: Add more rows as needed._
 
 |Categroy                       |Total Time (Hours:Minutes)|
 |-------------------------------|:------------------------:|
-|IM - Individual Module         |          10:00           |
+|IM - Individual Module         |          11:15           |
 |TP - Team Project              |           4:00           |
 |MTG - Class Meetings           |           4:00           |
-|**TOTAL**                      |          18:00           |
+|**TOTAL**                      |          19:15           |
