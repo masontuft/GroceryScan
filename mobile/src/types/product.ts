@@ -1,3 +1,5 @@
+import type { NutritionInfo } from './nutrition';
+
 export interface Product {
   id: string;
   name: string;
@@ -12,4 +14,6 @@ export interface Product {
   imageUrl: string | null;
   categories: string[];
   manufacturerPrefix: string | null;
+  /** Only ever populated via scan-resolve; search/direct-lookup paths carry null. */
+  nutrition: NutritionInfo | null;
 }
