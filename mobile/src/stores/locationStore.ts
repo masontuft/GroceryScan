@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { trackError } from '../services/analytics';
 
 export type Coordinate = [lat: number, lng: number];
 
@@ -26,19 +27,26 @@ export const useLocationStore = create<LocationState>()(
       source: null,
 
       setFromGPS: async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const loc = await Location.getCurrentPositionAsync({});
-        const coords: Coordinate = [loc.coords.latitude, loc.coords.longitude];
-        const [geo] = await Location.reverseGeocodeAsync({ latitude: coords[0], longitude: coords[1] });
-        if (geo) {
-          set({
-            state: geo.region ?? null,
-            zip: geo.postalCode ?? null,
-            city: geo.city ?? null,
-            county: geo.subregion ?? null,
-            source: 'gps',
-          });
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') return;
+          const loc = await Location.getCurrentPositionAsync({});
+          const coords: Coordinate = [loc.coords.latitude, loc.coords.longitude];
+          const [geo] = await Location.reverseGeocodeAsync({ latitude: coords[0], longitude: coords[1] });
+          if (geo) {
+            set({
+              state: geo.region ?? null,
+              zip: geo.postalCode ?? null,
+              city: geo.city ?? null,
+              county: geo.subregion ?? null,
+              source: 'gps',
+            });
+          }
+        } catch (err) {
+          // Previously unhandled — this left the "Use My Location" button stuck
+          // spinning forever in LocationScreen, since it never resolved/rejected
+          // back to the screen's await. Catching here fixes that and surfaces why.
+          trackError('locationStore:setFromGPS', err);
         }
       },
 

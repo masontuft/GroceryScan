@@ -14,7 +14,7 @@ import { ocrPriceTag, submitManualEntry } from '../services/api';
 import { QuickAddSheet } from '../components/QuickAddSheet';
 import type { QuickAddData } from '../components/QuickAddSheet';
 import { findStorePrice, isManualPriceStale } from '../utils/freshness';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 function isWincoStore(stores: { id: string; chain: string }[], storeId: string | null) {
@@ -101,8 +101,8 @@ export function ScanScreen({ navigation }: Props) {
               try {
                 const result = await resolveProduct(s.upc ?? s.barcode ?? s.id, selectedStoreId, { state: locationState, zip: locationZip });
                 navigation.navigate('ProductDetail', { scanResult: result, barcode });
-              } catch {
-                // fall through
+              } catch (err) {
+                trackError('ScanScreen:didYouMeanResolve', err, { barcode, suggestedProductId: s.id });
               }
             },
           })),
@@ -149,16 +149,20 @@ export function ScanScreen({ navigation }: Props) {
       // The Vision response may include an extractedUpc parsed from shelf-label
       // text like "G 17077-10932" (Winco format), which is more reliable than
       // trying to scan the shelf barcode directly (often an internal item code).
-      const ocr = await ocrPriceTag(photo.base64).catch(() => ({
-        price: null, productName: null, rawText: '', extractedUpc: null,
-      }));
+      const ocr = await ocrPriceTag(photo.base64).catch((err) => {
+        trackError('ScanScreen:ocrPriceTag', err, { barcode });
+        return { price: null, productName: null, rawText: '', extractedUpc: null };
+      });
 
       // Step 2: Look up the product using the best available identifier.
       // Prefer extractedUpc from the label text; fall back to the original barcode.
       const lookupBarcode = ocr.extractedUpc ?? barcode;
       const scanResult = await resolveProduct(lookupBarcode, selectedStoreId, {
         state: locationState, zip: locationZip,
-      }).catch(() => null);
+      }).catch((err) => {
+        if (!(err instanceof ProductNotFoundError)) trackError('ScanScreen:resolveAfterOcr', err, { lookupBarcode });
+        return null;
+      });
 
       track('price_tag_scanned', {
         success: Boolean(ocr.price !== null),
@@ -185,7 +189,8 @@ export function ScanScreen({ navigation }: Props) {
           ? scanResult.product.categories
           : undefined,
       });
-    } catch {
+    } catch (err) {
+      trackError('ScanScreen:handleScanPriceTag', err, { barcode });
       rootNav.navigate('ManualPrice', {
         productId: barcode,
         productName: `Item (${barcode})`,
@@ -210,7 +215,10 @@ export function ScanScreen({ navigation }: Props) {
     if (ocr.extractedUpc && quickAdd && !quickAdd.productId) {
       const upgraded = await resolveProduct(ocr.extractedUpc, selectedStoreId, {
         state: locationState, zip: locationZip,
-      }).catch(() => null);
+      }).catch((err) => {
+        if (!(err instanceof ProductNotFoundError)) trackError('ScanScreen:quickAddUpgrade', err, { extractedUpc: ocr.extractedUpc });
+        return null;
+      });
       if (upgraded) {
         setQuickAdd((prev) => prev ? {
           ...prev,
@@ -266,7 +274,7 @@ export function ScanScreen({ navigation }: Props) {
         // The basket item is already added locally, so don't block the flow —
         // but a failed persist means the price won't be shared/refreshed for
         // this store, so surface it loudly instead of swallowing it.
-        console.warn('[ScanScreen] failed to persist Winco price to store_pricing:', err);
+        trackError('ScanScreen:persistWincoPrice', err, { storeId: selectedStoreId, productId });
       });
     }
 

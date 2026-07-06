@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recalculateBasket } from '../services/api';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
 import type { BasketItem, BasketTotal } from '../types/basket';
 
 interface BasketState {
@@ -95,8 +95,10 @@ export const useBasketStore = create<BasketState>()(
         try {
           const total = await recalculateBasket(storeId, items, location);
           set({ lastTotal: total, loading: false });
-        } catch {
-          // keep last known total on error
+        } catch (err) {
+          // keep last known total on error, but the user sees a silently stale
+          // total with no indication anything failed unless this reaches PostHog
+          trackError('basketStore:recalculate', err, { itemCount: items.length, storeId });
           set({ loading: false });
         }
       },

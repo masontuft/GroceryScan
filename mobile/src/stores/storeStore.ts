@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchStores, type Store } from '../services/api';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
 
 interface StoreState {
   selectedStoreId: string | null;
@@ -24,7 +24,8 @@ export const useStoreStore = create<StoreState>()(
         try {
           const stores = await fetchStores();
           set({ stores, loading: false });
-        } catch {
+        } catch (err) {
+          trackError('storeStore:fetchStores', err);
           set({ loading: false });
         }
       },
