@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recalculateBasket } from '../services/api';
+import { track } from '../services/analytics';
 import type { BasketItem, BasketTotal } from '../types/basket';
 
 interface BasketState {
@@ -42,6 +43,12 @@ export const useBasketStore = create<BasketState>()(
           }
           return { items: [...state.items, item] };
         });
+        track('product_added_to_basket', {
+          productId: item.productId,
+          category: item.category,
+          unitPrice: item.unitPrice,
+          storeId: get().storeId,
+        });
         get().recalculate();
       },
 
@@ -70,7 +77,10 @@ export const useBasketStore = create<BasketState>()(
         get().recalculate();
       },
 
-      clearBasket: () => set({ items: [], lastTotal: null }),
+      clearBasket: () => {
+        track('basket_cleared', { itemCount: get().items.length });
+        set({ items: [], lastTotal: null });
+      },
 
       setStore: (storeId) => set({ storeId }),
       setLocation: (location) => set({ location }),

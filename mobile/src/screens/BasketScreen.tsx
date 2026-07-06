@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, View, Text, SectionList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { BasketAnalysisModal } from '../components/BasketAnalysisModal';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBasketStore } from '../stores/basketStore';
 import { useLocationStore } from '../stores/locationStore';
@@ -10,6 +10,7 @@ import { TotalBreakdown } from '../components/TotalBreakdown';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useLocalTotal } from '../hooks/useLocalTotal';
 import { ErrorMessages } from '../utils/errorMessages';
+import { track } from '../services/analytics';
 import type { RootStackParamList } from '../app/index';
 import type { BasketItem } from '../types/basket';
 
@@ -71,6 +72,17 @@ export function BasketScreen() {
   useEffect(() => {
     if (isConnected && items.length > 0) recalculate();
   }, [isConnected]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (items.length > 0) {
+        track('basket_checkout_viewed', {
+          itemCount: items.length,
+          estimatedTotal: displayTotal.estimatedTotal,
+        });
+      }
+    }, [items.length, displayTotal.estimatedTotal])
+  );
 
   if (items.length === 0) {
     return (
@@ -135,7 +147,10 @@ export function BasketScreen() {
             )}
             <TouchableOpacity
               style={styles.analysisBtn}
-              onPress={() => setAnalysisVisible(true)}
+              onPress={() => {
+                track('basket_analysis_viewed', { itemCount: items.length });
+                setAnalysisVisible(true);
+              }}
               activeOpacity={0.8}
               accessibilityLabel="View basket analysis"
               accessibilityRole="button"

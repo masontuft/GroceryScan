@@ -45,7 +45,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#2A383F"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "owner": "masson",
     "extra": {

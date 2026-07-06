@@ -14,6 +14,7 @@ import {
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES } from '../utils/normalizeCategory';
+import { track } from '../services/analytics';
 import { formatCurrency } from '../utils/formatCurrency';
 
 interface SessionEntry {
@@ -67,6 +68,8 @@ export function QuickEntryScreen() {
       { key: productId, name: trimmedName, price: parsedPrice, category },
       ...prev,
     ]);
+
+    track('quick_entry_item_added', { category, storeId: selectedStoreId, price: parsedPrice });
 
     // Reset for next item — keep category selected for rapid same-category entry
     setName('');

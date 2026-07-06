@@ -12,6 +12,7 @@ import { selectBestPrice } from '../pricing/selectBestPrice';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import { isPriceStale } from '../utils/freshness';
 import { supabase, submitManualEntry } from '../services/api';
+import { track } from '../services/analytics';
 import type { Product } from '../types/product';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
@@ -39,6 +40,16 @@ export function ProductDetailScreen({ route }: Props) {
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    track('product_viewed', {
+      productId: product.id,
+      productName: product.name,
+      price: best.price,
+      hasPromotion: promotions.length > 0,
+      storeId: selectedStoreId,
+    });
+  }, [product.id]);
 
   useEffect(() => {
     if (!product.manufacturerPrefix) return;

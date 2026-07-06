@@ -14,6 +14,7 @@ import { ocrPriceTag, submitManualEntry } from '../services/api';
 import { QuickAddSheet } from '../components/QuickAddSheet';
 import type { QuickAddData } from '../components/QuickAddSheet';
 import { findStorePrice, isManualPriceStale } from '../utils/freshness';
+import { track } from '../services/analytics';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
 function isWincoStore(stores: { id: string; chain: string }[], storeId: string | null) {
@@ -58,6 +59,7 @@ export function ScanScreen({ navigation }: Props) {
     setLoading(true);
     try {
       const result = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
+      track('barcode_scanned', { barcode, found: true, storeId: selectedStoreId });
       if (isWinco) {
         // Show inline quick-add sheet — product identity populated from resolve result
         const manualRow = findStorePrice(result.pricing, selectedStoreId);
@@ -80,6 +82,7 @@ export function ScanScreen({ navigation }: Props) {
         navigation.navigate('ProductDetail', { scanResult: result, barcode });
       }
     } catch (err) {
+      track('barcode_scanned', { barcode, found: false, storeId: selectedStoreId });
       if (isWinco) {
         // Show sheet even if lookup failed — user can type name + scan tag for price
         setQuickAdd({
@@ -156,6 +159,12 @@ export function ScanScreen({ navigation }: Props) {
       const scanResult = await resolveProduct(lookupBarcode, selectedStoreId, {
         state: locationState, zip: locationZip,
       }).catch(() => null);
+
+      track('price_tag_scanned', {
+        success: Boolean(ocr.price !== null),
+        hasExtractedUpc: Boolean(ocr.extractedUpc),
+        storeId: selectedStoreId,
+      });
 
       // Prefer database product name/brand/categories over Vision text.
       rootNav.navigate('ManualPrice', {

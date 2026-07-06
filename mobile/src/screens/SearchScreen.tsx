@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { searchProducts } from '../services/api';
+import { track } from '../services/analytics';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useProductStore } from '../stores/productStore';
@@ -30,8 +31,10 @@ export function SearchScreen({ navigation }: Props) {
     try {
       const res = await searchProducts(query.trim(), selectedStoreId);
       setResults(res);
+      track('product_searched', { query: query.trim(), resultCount: res.length, storeId: selectedStoreId });
     } catch {
       setResults([]);
+      track('product_searched', { query: query.trim(), resultCount: 0, storeId: selectedStoreId });
     } finally {
       setLoading(false);
     }
@@ -40,6 +43,7 @@ export function SearchScreen({ navigation }: Props) {
   const handleSelect = async (product: Product) => {
     const barcode = product.upc ?? product.ean ?? product.barcode ?? product.gtin;
     if (!barcode) return;
+    track('search_result_selected', { productId: product.id, productName: product.name, storeId: selectedStoreId });
     try {
       const scanResult = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       navigation.navigate('ProductDetail', { scanResult, barcode });

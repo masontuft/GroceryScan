@@ -17,6 +17,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { submitManualEntry } from '../services/api';
+import { track } from '../services/analytics';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
 import type { RootStackParamList } from '../app/index';
 
@@ -92,6 +93,13 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         size: size.trim() || null,
         unit: unit.trim() || null,
         categories: [selectedCategory],
+      });
+
+      track('manual_price_submitted', {
+        category: selectedCategory,
+        storeId: isOther ? result.storeId : pickedStoreId,
+        isNewStore: isOther,
+        price: parsedPrice,
       });
 
       if (isOther && result.storeId) {
