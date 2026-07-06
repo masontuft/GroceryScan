@@ -7,6 +7,7 @@ import { SerpApiWalmartProvider } from '../_shared/pricingProviders/serpApiWalma
 import { TargetProvider } from '../_shared/pricingProviders/target.ts';
 import type { PricingProvider, StorePricingResult } from '../_shared/pricingProviders/types.ts';
 import { extractManufacturerPrefix } from '../_shared/gs1.ts';
+import { fetchOffNutrition } from '../_shared/offNutrition.ts';
 
 // Return the input barcode plus common numeric variants so a single-scan
 // failure doesn't permanently block product identity lookup.
@@ -208,7 +209,41 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Product not found', barcode, suggestions: suggestions ?? [] }, 404);
   }
 
-  // 3. Fan out to pricing providers
+  // 3. Nutrition enrichment (Open Food Facts) — best-effort, and runs
+  // regardless of which identity path (own DB / upcitemdb / OFF identity
+  // fallback) resolved `product`, unlike the OFF call above which only ever
+  // fires when both #1 and #2 miss.
+  const NUTRITION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — nutrition changes far less than price
+  const nutritionStale =
+    !product.nutrition_fetched_at ||
+    Date.now() - new Date(product.nutrition_fetched_at).getTime() > NUTRITION_TTL_MS;
+
+  if (nutritionStale) {
+    try {
+      const off = await fetchOffNutrition(variants);
+      const { data: updated, error: updateErr } = await db
+        .from('products')
+        .update({
+          nutriscore_grade: off.nutriscoreGrade,
+          nova_group: off.novaGroup,
+          nutriments: off.nutriments,
+          ingredients_text: off.ingredientsText,
+          allergens_tags: off.allergensTags,
+          additives_tags: off.additivesTags,
+          nutrition_source: off.found ? 'openfoodfacts' : null,
+          nutrition_fetched_at: new Date().toISOString(),
+        })
+        .eq('id', product.id)
+        .select()
+        .single();
+      if (!updateErr && updated) product = updated;
+    } catch (err) {
+      // Best-effort only — never block/throw the scan response on nutrition failure.
+      console.error('scan-resolve nutrition fetch error:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // 4. Fan out to pricing providers
   let storeChain = 'unknown';
   let storeLocationId = storeId ?? '';
 
@@ -234,7 +269,7 @@ Deno.serve(async (req) => {
     )
     .map((r) => r.value!);
 
-  // 4. Upsert pricing rows from providers
+  // 5. Upsert pricing rows from providers
   if (freshPricing.length > 0 && storeId) {
     await db.from('store_pricing').upsert(
       freshPricing.map((p) => ({
@@ -252,7 +287,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 4b. Upsert UPCitemdb offer pricing for matching store chain
+  // 5b. Upsert UPCitemdb offer pricing for matching store chain
   if (storeId && storeChain !== 'unknown') {
     const matchingOffers = upcitemdbOfferPricing.filter((o) => o.chain === storeChain);
     if (matchingOffers.length > 0) {
@@ -273,12 +308,12 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 5. Load all pricing for this product (including any cached)
+  // 6. Load all pricing for this product (including any cached)
   const { data: allPricing } = storeId
     ? await db.from('store_pricing').select('*').eq('product_id', product.id).eq('store_id', storeId)
     : { data: [] };
 
-  // 6. Load active promotions
+  // 7. Load active promotions
   const now = new Date().toISOString();
   const { data: promotions } = storeId
     ? await db.from('promotions')
@@ -312,6 +347,16 @@ Deno.serve(async (req) => {
       imageUrl: product.image_url,
       categories: product.categories ?? [],
       manufacturerPrefix: product.manufacturer_prefix ?? null,
+      nutrition: product.nutrition_fetched_at ? {
+        nutriScoreGrade: product.nutriscore_grade,
+        novaGroup: product.nova_group,
+        nutriments: product.nutriments,
+        ingredientsText: product.ingredients_text,
+        allergens: product.allergens_tags ?? [],
+        additives: product.additives_tags ?? [],
+        source: product.nutrition_source,
+        fetchedAt: product.nutrition_fetched_at,
+      } : null,
     },
     pricing: (allPricing ?? []).map((row: Record<string, unknown>) => ({
       id: row.id,

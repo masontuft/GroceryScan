@@ -5,6 +5,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
+import { NutritionPanel } from '../components/NutritionPanel';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
@@ -63,6 +64,7 @@ export function ProductDetailScreen({ route }: Props) {
             imageUrl: row.image_url as string | null,
             categories: (row.categories as string[]) ?? [],
             manufacturerPrefix: row.manufacturer_prefix as string | null ?? null,
+            nutrition: null, // nutrition only ever arrives via scan-resolve
           })));
         }
       });
@@ -157,6 +159,7 @@ export function ProductDetailScreen({ route }: Props) {
           Pricing from {best.source.source} · {new Date(best.source.sourceTimestamp).toLocaleString()}
         </Text>
       )}
+      <NutritionPanel nutrition={product.nutrition} />
       {brandProducts.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>More from this brand</Text>

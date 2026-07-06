@@ -75,6 +75,7 @@ export async function searchProducts(q: string, _storeId: string | null): Promis
     imageUrl: row.image_url as string | null,
     categories: (row.categories as string[]) ?? [],
     manufacturerPrefix: (row.manufacturer_prefix as string | null) ?? null,
+    nutrition: null, // nutrition only ever arrives via scan-resolve
   }));
 }
 
@@ -161,6 +162,7 @@ export async function lookupProductByBarcode(barcode: string): Promise<ScanResul
       imageUrl: product.image_url as string | null,
       categories: (product.categories as string[]) ?? [],
       manufacturerPrefix: product.manufacturer_prefix as string | null ?? null,
+      nutrition: null, // nutrition only ever arrives via scan-resolve
     },
     pricing,
     promotions: [],
