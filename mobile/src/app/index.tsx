@@ -4,7 +4,9 @@ import Constants from 'expo-constants';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { PostHogProvider } from 'posthog-react-native';
 import type { ScanResult } from '../services/api';
+import { posthog } from '../services/analytics';
 
 import { ScanScreen } from '../screens/ScanScreen';
 import { ProductDetailScreen } from '../screens/ProductDetailScreen';
@@ -162,34 +164,36 @@ export function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Root.Navigator screenOptions={{ headerShown: false }}>
-        <Root.Screen name="MainTabs" component={MainTabs} />
-        <Root.Screen
-          name="StoreSelect"
-          component={StoreSelectScreen}
-          options={{ headerShown: true, presentation: 'modal', title: 'Select Store' }}
-        />
-        <Root.Screen
-          name="Location"
-          component={LocationScreen}
-          options={{ headerShown: true, presentation: 'modal', title: 'My Location' }}
-        />
-        <Root.Screen
-          name="ManualPrice"
-          component={ManualPriceScreen}
-          options={{ headerShown: true, presentation: 'modal', title: 'Enter Price' }}
-        />
-        <Root.Screen
-          name="WincoEntry"
-          component={WincoQuickEntryScreen}
-          options={{ headerShown: true, presentation: 'modal', title: 'Winco Quick Entry' }}
-        />
-        <Root.Screen
-          name="Dev"
-          component={DevScreen}
-          options={{ headerShown: true, title: 'Developer Settings' }}
-        />
-      </Root.Navigator>
+      <PostHogProvider client={posthog ?? undefined} autocapture={{ captureTouches: false }}>
+        <Root.Navigator screenOptions={{ headerShown: false }}>
+          <Root.Screen name="MainTabs" component={MainTabs} />
+          <Root.Screen
+            name="StoreSelect"
+            component={StoreSelectScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'Select Store' }}
+          />
+          <Root.Screen
+            name="Location"
+            component={LocationScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'My Location' }}
+          />
+          <Root.Screen
+            name="ManualPrice"
+            component={ManualPriceScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'Enter Price' }}
+          />
+          <Root.Screen
+            name="WincoEntry"
+            component={WincoQuickEntryScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'Winco Quick Entry' }}
+          />
+          <Root.Screen
+            name="Dev"
+            component={DevScreen}
+            options={{ headerShown: true, title: 'Developer Settings' }}
+          />
+        </Root.Navigator>
+      </PostHogProvider>
     </NavigationContainer>
   );
 }

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Grocery Scanner",
+    "name": "GroceryScan",
     "slug": "groceryscan",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -45,7 +45,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#2A383F"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "owner": "masson",
     "extra": {

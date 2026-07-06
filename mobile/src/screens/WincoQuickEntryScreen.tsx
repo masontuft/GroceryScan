@@ -15,6 +15,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraView as CameraViewType } from 'expo-camera';
 import { ocrPriceTag, submitManualEntry } from '../services/api';
+import { track } from '../services/analytics';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -192,6 +193,13 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
     });
 
     setAddedEntries((prev) => [{ id: productId, name, price: parsedPrice }, ...prev]);
+
+    track('winco_item_added', {
+      isResolved: Boolean(resolvedProduct),
+      storeId: selectedStoreId,
+      category: selectedCategory,
+      price: parsedPrice,
+    });
 
     // Persist the price into store_pricing so it's shared/refreshed like every
     // other chain's pricing, instead of only living in this device's basket.

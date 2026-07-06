@@ -14,6 +14,7 @@ import Constants from 'expo-constants';
 import { useProductStore } from '../stores/productStore';
 import { useBasketStore } from '../stores/basketStore';
 import { useLocationStore } from '../stores/locationStore';
+import { analyticsEnvironment } from '../services/analytics';
 
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL as string) ?? '(not set)';
 
@@ -175,6 +176,7 @@ export function DevScreen() {
         <StatRow label="Expo SDK" value={Constants.expoConfig?.sdkVersion ?? '—'} />
         <StatRow label="Platform" value={`${Platform.OS} ${Platform.Version}`} />
         <StatRow label="Supabase URL" value={maskSupabaseUrl(SUPABASE_URL)} />
+        <StatRow label="Analytics environment" value={analyticsEnvironment} />
       </View>
       <ActionButton label="Share Device Info" onPress={handleShareDeviceInfo} />
 
