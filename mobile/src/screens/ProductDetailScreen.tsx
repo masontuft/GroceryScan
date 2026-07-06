@@ -12,7 +12,7 @@ import { selectBestPrice } from '../pricing/selectBestPrice';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import { isPriceStale } from '../utils/freshness';
 import { supabase, submitManualEntry } from '../services/api';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
 import type { Product } from '../types/product';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
@@ -59,7 +59,11 @@ export function ProductDetailScreen({ route }: Props) {
       .eq('manufacturer_prefix', product.manufacturerPrefix)
       .neq('id', product.id)
       .limit(6)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          trackError('ProductDetailScreen:brandProductsFetch', error, { productId: product.id });
+          return;
+        }
         if (data) {
           setBrandProducts(data.map((row: Record<string, unknown>) => ({
             id: row.id as string,
@@ -91,6 +95,7 @@ export function ProductDetailScreen({ route }: Props) {
       await submitManualEntry({ existingProductId: product.id, price: newPrice, storeId });
       setPriceOverride(newPrice);
     } catch (err) {
+      trackError('ProductDetailScreen:handleSavePrice', err, { productId: product.id, storeId });
       const message = err instanceof Error ? err.message : String(err);
       Alert.alert('Error', `Could not save price: ${message}`);
     }

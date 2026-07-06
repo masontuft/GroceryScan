@@ -15,11 +15,11 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraView as CameraViewType } from 'expo-camera';
 import { ocrPriceTag, submitManualEntry } from '../services/api';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { useProductStore } from '../stores/productStore';
+import { useProductStore, ProductNotFoundError } from '../stores/productStore';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
@@ -114,7 +114,8 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
       } else {
         setPriceHint({ text: 'No recent price — please verify', color: freshnessColor('cached') });
       }
-    } catch {
+    } catch (err) {
+      if (!(err instanceof ProductNotFoundError)) trackError('WincoQuickEntry:lookupBarcode', err, { barcode });
       // Unknown barcode — let user type the name
       setResolvedProduct(null);
       setProductName('');
@@ -154,7 +155,8 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
       } else {
         Alert.alert('No price found', 'Couldn\'t read a price from that image. Try moving closer to the label.');
       }
-    } catch {
+    } catch (err) {
+      trackError('WincoQuickEntry:handleScanPriceTag', err);
       Alert.alert('Error', 'Failed to scan price tag. Please try again or enter manually.');
     } finally {
       setOcrLoading(false);
@@ -215,7 +217,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
         // The basket item is already added locally, so don't block the flow —
         // but a failed persist means the price won't be shared/refreshed for
         // this store, so surface it loudly instead of swallowing it.
-        console.warn('[WincoQuickEntry] failed to persist price to store_pricing:', err);
+        trackError('WincoQuickEntry:persistPrice', err, { storeId: selectedStoreId, productId });
       });
     }
 

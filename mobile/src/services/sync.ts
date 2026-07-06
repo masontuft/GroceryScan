@@ -3,6 +3,7 @@ import { useProductStore } from '../stores/productStore';
 import { useBasketStore } from '../stores/basketStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useStoreStore } from '../stores/storeStore';
+import { trackError } from './analytics';
 
 const PRICING_TTL_MS = 4 * 60 * 60 * 1000;
 
@@ -34,8 +35,10 @@ export function startSyncListener() {
           true
         );
         await new Promise((r) => setTimeout(r, 300)); // 300ms between requests
-      } catch {
-        // Best-effort sync; ignore individual failures
+      } catch (err) {
+        // Best-effort sync — don't interrupt the loop, but a background pricing
+        // refresh failing is invisible to the user, so it must reach PostHog.
+        trackError('backgroundSync:resolveProduct', err, { barcode });
       }
     }
 

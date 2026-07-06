@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { searchProducts } from '../services/api';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useProductStore } from '../stores/productStore';
@@ -32,8 +32,9 @@ export function SearchScreen({ navigation }: Props) {
       const res = await searchProducts(query.trim(), selectedStoreId);
       setResults(res);
       track('product_searched', { query: query.trim(), resultCount: res.length, storeId: selectedStoreId });
-    } catch {
+    } catch (err) {
       setResults([]);
+      trackError('SearchScreen:handleSearch', err, { query: query.trim() });
       track('product_searched', { query: query.trim(), resultCount: 0, storeId: selectedStoreId });
     } finally {
       setLoading(false);
@@ -47,8 +48,11 @@ export function SearchScreen({ navigation }: Props) {
     try {
       const scanResult = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       navigation.navigate('ProductDetail', { scanResult, barcode });
-    } catch {
-      // silently ignore, product detail will show partial data
+    } catch (err) {
+      // Previously fully silent — tapping a search result did nothing with no
+      // feedback at all. A search result failing to resolve is unusual (it came
+      // from our own DB), so it's always worth tracking, not just business misses.
+      trackError('SearchScreen:handleSelect', err, { productId: product.id, barcode });
     }
   };
 

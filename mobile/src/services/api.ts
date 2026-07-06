@@ -3,6 +3,7 @@ import type { Product } from '../types/product';
 import type { StorePricing } from '../types/pricing';
 import type { Promotion } from '../types/promotion';
 import type { BasketItem, BasketTotal } from '../types/basket';
+import { trackError } from './analytics';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -103,6 +104,7 @@ export async function submitManualEntry(args: {
         if (body.error) throw new Error(body.error);
       } catch (parseErr) {
         if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+        trackError('submitManualEntry:parseErrorBody', parseErr);
       }
     }
     throw error;
@@ -124,7 +126,11 @@ export async function lookupProductByBarcode(barcode: string): Promise<ScanResul
     .or(`barcode.eq.${barcode},upc.eq.${barcode},ean.eq.${barcode},gtin.eq.${barcode}`)
     .maybeSingle();
 
-  if (error || !product) return null;
+  if (error) {
+    trackError('lookupProductByBarcode', error, { barcode });
+    return null;
+  }
+  if (!product) return null;
 
   // Also fetch any stored pricing rows for this product so the best price
   // can be selected (including manually-entered prices from manual-submit).

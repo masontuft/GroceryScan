@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { resolveBarcode, lookupProductByBarcode, type ScanResult } from '../services/api';
+import { trackError } from '../services/analytics';
 import type { Product } from '../types/product';
 
 export class ProductNotFoundError extends Error {
@@ -77,9 +78,13 @@ export const useProductStore = create<ProductState>()(
               if (ctx instanceof Response) {
                 const body = await ctx.json() as { suggestions?: Product[] };
                 suggestions = body.suggestions ?? [];
+              } else {
+                // No structured 404 response — this isn't a clean "not found," it's
+                // more likely a network/unexpected failure masquerading as one.
+                trackError('resolveProduct:unexpectedFailure', err, { barcode });
               }
-            } catch {
-              // ignore parse errors
+            } catch (parseErr) {
+              trackError('resolveProduct:parse404Body', parseErr, { barcode });
             }
             throw new ProductNotFoundError(suggestions);
           }
