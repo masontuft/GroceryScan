@@ -74,6 +74,7 @@ Build a React Native application using TypeScript that scans product barcodes in
 - unit
 - imageUrl
 - categories
+- nutrition — `NutritionInfo | null`; Nutri-Score, NOVA group, per-100g nutriments, ingredients, allergens/additives, plus an app-computed health verdict (see [docs/health-verdict-rubric.md](docs/health-verdict-rubric.md)); refreshed ~30d via Open Food Facts
 
 ### StorePricing
 - storeId
