@@ -7,9 +7,12 @@ interface Props {
   total: BasketTotal;
   /** True when using locally-computed totals (backend hasn't responded yet) */
   isEstimate?: boolean;
+  /** False when no location is set — a $0 tax then means "unknown", not "exempt". */
+  hasLocation?: boolean;
 }
 
-export function TotalBreakdown({ total, isEstimate = false }: Props) {
+export function TotalBreakdown({ total, isEstimate = false, hasLocation = true }: Props) {
+  const taxNote = total.tax > 0 ? 'estimate' : hasLocation ? 'tax-exempt' : 'set location for estimate';
   return (
     <View style={styles.container}>
       {isEstimate && (
@@ -17,7 +20,7 @@ export function TotalBreakdown({ total, isEstimate = false }: Props) {
       )}
       <Row label="Subtotal" value={total.subtotal} />
       {total.discounts > 0 && <Row label="Savings" value={-total.discounts} color="#16a34a" />}
-      <Row label="Est. Tax" value={total.tax} note={total.tax === 0 ? 'tax-exempt' : 'estimate'} />
+      <Row label="Est. Tax" value={total.tax} note={taxNote} />
       <View style={styles.divider} />
       <Row label="Est. Total" value={total.estimatedTotal} bold />
     </View>

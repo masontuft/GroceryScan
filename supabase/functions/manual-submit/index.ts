@@ -1,6 +1,13 @@
 import { corsResponse, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 
+// A shelf price above this is almost certainly a client-side data-entry
+// mistake (e.g. a missing decimal point) rather than a real grocery item
+// price. Manual entries are stored with confidence_score 1.0 and therefore
+// permanently outrank every other pricing source for this product/store, so
+// this is the last line of defense against bad data poisoning store_pricing.
+const MAX_REASONABLE_PRICE = 1000;
+
 /**
  * manual-submit — persists user-entered product data and pricing to Supabase.
  *
@@ -55,6 +62,7 @@ async function handleRequest(req: Request) {
   let { storeId } = body;
 
   if (!price || price <= 0) return errorResponse('price is required and must be > 0');
+  if (price > MAX_REASONABLE_PRICE) return errorResponse(`price must be no more than $${MAX_REASONABLE_PRICE}`);
   if (!storeId && !customStoreName) return errorResponse('storeId or customStoreName is required');
   if (!existingProductId && (!barcode || !productName)) {
     return errorResponse('barcode and productName are required when existingProductId is not provided');

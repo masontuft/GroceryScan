@@ -9,9 +9,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { STANDARD_CATEGORIES, normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import { freshnessColor } from '../utils/freshness';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
 
 export interface ExistingPrice {
   price: number;
@@ -79,9 +81,9 @@ export function QuickAddSheet({
       ? { text: `Confirm or update — last verified ${relativeAge(existingPrice.sourceTimestamp)}`, color: freshnessColor('recent') }
       : { text: 'No recent price — please verify', color: freshnessColor('cached') };
 
-  const parsedPrice = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-  const priceValid = !isNaN(parsedPrice) && parsedPrice > 0;
-  const canAdd = priceValid && name.trim().length > 0;
+  const parsedPrice = parsePriceInput(priceText);
+  const priceTooHigh = isPriceOverCap(parsedPrice);
+  const canAdd = isPriceEntered(parsedPrice) && name.trim().length > 0;
 
   const handleScanTag = async () => {
     setTagScanning(true);
@@ -97,8 +99,7 @@ export function QuickAddSheet({
     }
   };
 
-  const handleAdd = () => {
-    if (!canAdd) return;
+  const commitAdd = () => {
     onAdd({
       productId,
       name: name.trim(),
@@ -107,6 +108,22 @@ export function QuickAddSheet({
       taxable: !isTaxExempt(selectedCategory),
       imageUrl,
     });
+  };
+
+  const handleAdd = () => {
+    if (!canAdd) return;
+    if (priceTooHigh) {
+      Alert.alert(
+        'Confirm price',
+        `$${parsedPrice.toFixed(2)} is unusually high for a grocery item. Add it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add anyway', onPress: commitAdd },
+        ]
+      );
+      return;
+    }
+    commitAdd();
   };
 
   return (
@@ -205,6 +222,9 @@ export function QuickAddSheet({
             )}
           </TouchableOpacity>
         </View>
+        {priceTooHigh && (
+          <Text style={styles.priceWarning}>That's over ${MAX_REASONABLE_PRICE} — check the decimal point</Text>
+        )}
 
         {/* Add to basket */}
         <TouchableOpacity
@@ -278,6 +298,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
+  },
+  priceWarning: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#f59e0b',
+    marginTop: 6,
   },
   nameInput: {
     borderWidth: 1,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { searchProducts } from '../services/api';
@@ -19,6 +19,11 @@ export function SearchScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  // Ref, not state — a rapid double-tap (or Enter + tap) both read `loading`
+  // before the first setLoading(true) has re-rendered, so a state-based guard
+  // lets two searchProducts calls race and their results/loading updates
+  // interleave unpredictably (the reported flicker/blank-screen behavior).
+  const searchInFlight = useRef(false);
 
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const locationState = useLocationStore((s) => s.state);
@@ -26,7 +31,8 @@ export function SearchScreen({ navigation }: Props) {
   const resolveProduct = useProductStore((s) => s.resolveProduct);
 
   const handleSearch = async () => {
-    if (!query.trim()) return;
+    if (!query.trim() || searchInFlight.current) return;
+    searchInFlight.current = true;
     setLoading(true);
     setSearched(true);
     try {
@@ -38,6 +44,7 @@ export function SearchScreen({ navigation }: Props) {
       trackError('SearchScreen:handleSearch', err, { query: query.trim() });
       track('product_searched', { query: query.trim(), resultCount: 0, storeId: selectedStoreId });
     } finally {
+      searchInFlight.current = false;
       setLoading(false);
     }
   };
@@ -76,6 +83,7 @@ export function SearchScreen({ navigation }: Props) {
         <TouchableOpacity
           style={styles.btn}
           onPress={handleSearch}
+          disabled={loading}
           accessibilityLabel="Search products"
           accessibilityRole="button"
         >

@@ -1,4 +1,4 @@
-import taxRates from '../../../mobile/src/constants/taxRates.json' assert { type: 'json' };
+import taxRates from '../../../mobile/src/constants/taxRates.json' with { type: 'json' };
 
 interface TaxRate {
   state: string;

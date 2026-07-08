@@ -26,6 +26,7 @@ import { useLocationStore } from '../stores/locationStore';
 import { formatCurrency } from '../utils/formatCurrency';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import { findStorePrice, isManualPriceStale, freshnessColor } from '../utils/freshness';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
 import type { RootStackParamList } from '../app/index';
 import type { Product } from '../types/product';
 
@@ -64,6 +65,11 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
   const lastScanned = useRef<string | null>(null);
   const priceInputRef = useRef<TextInput>(null);
   const cameraRef = useRef<CameraViewType>(null);
+  // Ref, not state — the manual "Look up" button and the TextInput's
+  // onSubmitEditing can both fire lookupBarcode in the same tick (double-tap,
+  // or Enter immediately followed by a tap), and a state-based guard doesn't
+  // take effect until the next render, letting two lookups race.
+  const loadingProductRef = useRef(false);
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const addItem = useBasketStore((s) => s.addItem);
@@ -81,7 +87,8 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
   }, []));
 
   const lookupBarcode = async (barcode: string) => {
-    if (loadingProduct) return;
+    if (loadingProductRef.current) return;
+    loadingProductRef.current = true;
     setLoadingProduct(true);
     setPriceText('');
     setResolvedProduct(null);
@@ -121,6 +128,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
       setProductName('');
       setNameEditable(true);
     } finally {
+      loadingProductRef.current = false;
       setLoadingProduct(false);
       setTimeout(() => priceInputRef.current?.focus(), 100);
     }
@@ -171,13 +179,12 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
     lookupBarcode(code);
   };
 
-  const parsedPrice = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-  const priceValid = !isNaN(parsedPrice) && parsedPrice > 0;
+  const parsedPrice = parsePriceInput(priceText);
+  const priceTooHigh = isPriceOverCap(parsedPrice);
   const nameValid = productName.trim().length > 0;
-  const canAdd = priceValid && nameValid && !loadingProduct;
+  const canAdd = nameValid && isPriceEntered(parsedPrice) && !loadingProduct;
 
-  const handleAdd = () => {
-    if (!canAdd) return;
+  const commitAdd = () => {
     const name = productName.trim();
     const category = selectedCategory;
     const productId = resolvedProduct?.id ?? `winco-${Date.now()}`;
@@ -230,6 +237,22 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
     setCurrentBarcode(null);
     setPriceHint(null);
     lastScanned.current = null;
+  };
+
+  const handleAdd = () => {
+    if (!canAdd) return;
+    if (priceTooHigh) {
+      Alert.alert(
+        'Confirm price',
+        `$${parsedPrice.toFixed(2)} is unusually high for a grocery item. Add it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add anyway', onPress: commitAdd },
+        ]
+      );
+      return;
+    }
+    commitAdd();
   };
 
   if (!permission) {
@@ -298,6 +321,7 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
           <TouchableOpacity
             style={styles.lookupBtn}
             onPress={handleManualLookup}
+            disabled={loadingProduct}
             accessibilityLabel="Look up product"
             accessibilityRole="button"
           >
@@ -383,6 +407,9 @@ export function WincoQuickEntryScreen({ navigation, route }: Props) {
                 <Text style={styles.ocrBtnText}>{ocrLoading ? '…' : '📷'}</Text>
               </TouchableOpacity>
             </View>
+            {priceTooHigh && (
+              <Text style={styles.priceWarning}>That's over ${MAX_REASONABLE_PRICE} — check the decimal point</Text>
+            )}
 
             <TouchableOpacity
               style={[styles.addBtn, !canAdd && styles.addBtnDisabled]}
@@ -538,6 +565,7 @@ const styles = StyleSheet.create({
   },
   dollarSign: { fontSize: 22, fontWeight: '600', color: '#1e293b' },
   priceInput: { flex: 1, fontSize: 28, fontWeight: '700', color: '#1e293b' },
+  priceWarning: { fontSize: 12, color: '#f59e0b', fontWeight: '600', marginTop: 4 },
   ocrBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   ocrBtnText: { fontSize: 22 },
   addBtn: {

@@ -3,12 +3,12 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recalculateBasket } from '../services/api';
 import { track, trackError } from '../services/analytics';
+import { useLocationStore } from './locationStore';
 import type { BasketItem, BasketTotal } from '../types/basket';
 
 interface BasketState {
   items: BasketItem[];
   storeId: string | null;
-  location: { state: string | null; zip: string | null };
   lastTotal: BasketTotal | null;
   loading: boolean;
 
@@ -18,7 +18,6 @@ interface BasketState {
   updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'notes'>>) => void;
   clearBasket: () => void;
   setStore: (storeId: string | null) => void;
-  setLocation: (location: { state: string | null; zip: string | null }) => void;
   recalculate: () => Promise<void>;
 }
 
@@ -27,7 +26,6 @@ export const useBasketStore = create<BasketState>()(
     (set, get) => ({
       items: [],
       storeId: null,
-      location: { state: null, zip: null },
       lastTotal: null,
       loading: false,
 
@@ -83,17 +81,22 @@ export const useBasketStore = create<BasketState>()(
       },
 
       setStore: (storeId) => set({ storeId }),
-      setLocation: (location) => set({ location }),
 
       recalculate: async () => {
-        const { items, storeId, location } = get();
+        const { items, storeId } = get();
         if (items.length === 0) {
           set({ lastTotal: { subtotal: 0, discounts: 0, tax: 0, estimatedTotal: 0 } });
           return;
         }
         set({ loading: true });
         try {
-          const total = await recalculateBasket(storeId, items, location);
+          // Read directly from locationStore rather than keeping a local copy —
+          // a separate `location` field here previously went stale forever
+          // (nothing ever wrote to it), silently sending state:null on every
+          // recalculation and making the backend return $0 tax regardless of
+          // the user's actual location.
+          const { state, zip } = useLocationStore.getState();
+          const total = await recalculateBasket(storeId, items, { state, zip });
           set({ lastTotal: total, loading: false });
         } catch (err) {
           // keep last known total on error, but the user sees a silently stale
@@ -106,7 +109,7 @@ export const useBasketStore = create<BasketState>()(
     {
       name: 'basket-store',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ items: s.items, storeId: s.storeId, location: s.location }),
+      partialize: (s) => ({ items: s.items, storeId: s.storeId }),
       skipHydration: true,
     }
   )

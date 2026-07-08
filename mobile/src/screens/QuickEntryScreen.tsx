@@ -10,12 +10,14 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES } from '../utils/normalizeCategory';
 import { track } from '../services/analytics';
 import { formatCurrency } from '../utils/formatCurrency';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
 
 interface SessionEntry {
   key: string;
@@ -39,13 +41,12 @@ export function QuickEntryScreen() {
 
   const storeName = stores.find((s) => s.id === selectedStoreId)?.name;
 
-  const parsedPrice = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-  const priceValid = !isNaN(parsedPrice) && parsedPrice > 0;
+  const parsedPrice = parsePriceInput(priceText);
+  const priceTooHigh = isPriceOverCap(parsedPrice);
   const nameValid = name.trim().length > 0;
-  const canAdd = priceValid && nameValid;
+  const canAdd = nameValid && isPriceEntered(parsedPrice);
 
-  const handleAdd = () => {
-    if (!canAdd) return;
+  const commitAdd = () => {
     const trimmedName = name.trim();
     const category = selectedCategory === 'Other'
       ? normalizeCategory(trimmedName)  // try to infer from name as last resort
@@ -75,6 +76,22 @@ export function QuickEntryScreen() {
     setName('');
     setPriceText('');
     nameInputRef.current?.focus();
+  };
+
+  const handleAdd = () => {
+    if (!canAdd) return;
+    if (priceTooHigh) {
+      Alert.alert(
+        'Confirm price',
+        `$${parsedPrice.toFixed(2)} is unusually high for a grocery item. Add it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add anyway', onPress: commitAdd },
+        ]
+      );
+      return;
+    }
+    commitAdd();
   };
 
   return (
@@ -122,6 +139,9 @@ export function QuickEntryScreen() {
               onSubmitEditing={handleAdd}
             />
           </View>
+          {priceTooHigh && (
+            <Text style={styles.priceWarning}>That's over ${MAX_REASONABLE_PRICE} — check the decimal point</Text>
+          )}
 
           <Text style={[styles.label, { marginTop: 14 }]}>CATEGORY</Text>
           <FlatList
@@ -236,6 +256,7 @@ const styles = StyleSheet.create({
   },
   dollarSign: { fontSize: 22, fontWeight: '600', color: '#1e293b' },
   priceInput: { flex: 1, fontSize: 28, fontWeight: '700', color: '#1e293b' },
+  priceWarning: { fontSize: 12, color: '#f59e0b', fontWeight: '600', marginTop: 4 },
 
   chipRow: { paddingVertical: 4, gap: 6 },
   chip: {

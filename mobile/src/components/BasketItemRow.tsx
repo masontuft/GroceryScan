@@ -7,9 +7,11 @@ import {
   Switch,
   ScrollView,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { formatCurrency } from '../utils/formatCurrency';
 import { STANDARD_CATEGORIES } from '../utils/normalizeCategory';
+import { parsePriceInput, isPriceOverCap, isPriceEntered } from '../utils/priceValidation';
 import type { BasketItem } from '../types/basket';
 
 interface Props {
@@ -35,15 +37,30 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
 
   const lineTotal = item.unitPrice * item.quantity - item.appliedDiscount;
 
-  const handleSave = () => {
-    const price = parseFloat(editPrice.replace(/[^0-9.]/g, ''));
+  const commitSave = (price: number) => {
     onUpdate(item.productId, {
       name: editName.trim() || item.name,
-      unitPrice: isNaN(price) || price <= 0 ? item.unitPrice : price,
+      unitPrice: isPriceEntered(price) ? price : item.unitPrice,
       category: editCategory,
       taxable: editTaxable,
     });
     setExpanded(false);
+  };
+
+  const handleSave = () => {
+    const price = parsePriceInput(editPrice);
+    if (isPriceOverCap(price)) {
+      Alert.alert(
+        'Confirm price',
+        `$${price.toFixed(2)} is unusually high for a grocery item. Save it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save anyway', onPress: () => commitSave(price) },
+        ]
+      );
+      return;
+    }
+    commitSave(price);
   };
 
   const handleDiscard = () => {
