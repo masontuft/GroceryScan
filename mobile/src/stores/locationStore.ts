@@ -6,6 +6,24 @@ import { trackError } from '../services/analytics';
 
 export type Coordinate = [lat: number, lng: number];
 
+/**
+ * Standalone device-coordinate fetch, separate from setFromGPS()'s
+ * state/zip/city resolution (which is used for tax lookups). Not persisted —
+ * coordinates here are only ever used transiently for a resolve-nearby-store
+ * call. Never throws; returns null on missing permission or any failure.
+ */
+export async function getCurrentCoords(): Promise<Coordinate | null> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return null;
+    const loc = await Location.getCurrentPositionAsync({});
+    return [loc.coords.latitude, loc.coords.longitude];
+  } catch (err) {
+    trackError('locationStore:getCurrentCoords', err);
+    return null;
+  }
+}
+
 interface LocationState {
   state: string | null;
   zip: string | null;

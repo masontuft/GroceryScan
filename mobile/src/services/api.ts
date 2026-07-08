@@ -184,6 +184,30 @@ export async function ocrPriceTag(imageBase64: string): Promise<{ price: number 
   return data as { price: number | null; productName: string | null; rawText: string; extractedUpc: string | null };
 }
 
+/**
+ * Resolves a device lat/lng to the nearest real store for a chain (currently
+ * only 'walmart' is supported server-side) and upserts it into the `stores`
+ * table. Never throws — this is a best-effort background/on-demand lookup;
+ * callers treat `null` as "couldn't resolve" and show their own messaging.
+ */
+export async function resolveNearbyStore(args: {
+  chain: string;
+  lat: number;
+  lng: number;
+}): Promise<Store | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('resolve-nearby-store', { body: args });
+    if (error) {
+      trackError('resolveNearbyStore', error);
+      return null;
+    }
+    return (data as { store: Store | null }).store ?? null;
+  } catch (err) {
+    trackError('resolveNearbyStore', err);
+    return null;
+  }
+}
+
 export async function fetchStores(): Promise<Store[]> {
   const { data, error } = await supabase.from('stores').select('*').eq('active', true);
   if (error) throw error;

@@ -8,11 +8,17 @@ export interface StorePricingResult {
   sourceTimestamp: string;
 }
 
+export interface ProductInfo {
+  name: string | null;
+  brand: string | null;
+}
+
 export interface PricingProvider {
   name: string;
   supportedChains: string[];  // ['kroger'] or ['*'] for aggregators
   fetchPrice(
     barcode: string,
     locationId: string,
+    productInfo?: ProductInfo,
   ): Promise<StorePricingResult | null>;
 }

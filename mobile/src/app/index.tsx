@@ -81,11 +81,7 @@ function SearchNavigator() {
 }
 
 function MainTabs({ navigation }: { navigation: any }) {
-  const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
-  const stores = useStoreStore((s) => s.stores);
   const state = useLocationStore((s) => s.state);
-
-  const storeName = stores.find((s) => s.id === selectedStoreId)?.name ?? 'No Store';
 
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -132,11 +128,6 @@ function MainTabs({ navigation }: { navigation: any }) {
           headerLeft: () => (
             <TouchableOpacity onPress={handleVersionTap} style={{ marginLeft: 16 }}>
               <Text style={{ color: '#cbd5e1', fontSize: 11 }}>v{appVersion}</Text>
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <TouchableOpacity onPress={() => navigation.navigate('StoreSelect')} style={{ marginRight: 16 }}>
-              <Text style={{ color: '#2563eb', fontWeight: '600' }}>{storeName}</Text>
             </TouchableOpacity>
           ),
         }}

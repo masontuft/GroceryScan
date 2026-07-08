@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Claude Code">
   <diagram name="Full Scanning Workflow" id="scanning-workflow">
-    <mxGraphModel dx="2272" dy="1869" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="1937" dy="1807" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -55,8 +55,14 @@
         <mxCell id="e5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="Select-then-insert product&#xa;(check upc match FIRST — plain upsert against the&#xa;partial upc index silently fails; see manual-submit note)" vertex="1">
           <mxGeometry height="80" width="320" x="420" y="1210" as="geometry" />
         </mxCell>
-        <mxCell id="e6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="Fan out to matching PricingProviders&#xa;(Kroger / Walmart / Target / Instacart) by store chain&#xa;— Promise.allSettled, parallel" vertex="1">
-          <mxGeometry height="70" width="320" x="420" y="1330" as="geometry" />
+        <mxCell id="e6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="Fan out to matching PricingProviders&#xa;(Kroger / Walmart(x2) / Target / Instacart) by store chain&#xa;— Promise.allSettled, parallel&#xa;each gets fetchPrice(barcode, locationId, { name, brand })" vertex="1">
+          <mxGeometry height="80" width="320" x="420" y="1330" as="geometry" />
+        </mxCell>
+        <mxCell id="e6b" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="SerpApiWalmartProvider specifics (fixed 2026-07-07):&#xa;• query = brand+name text search — walmart engine does NOT&#xa;  index by raw UPC, a barcode-only query returns zero results&#xa;• winning candidate still verified via its own UPC vs. scanned barcode&#xa;• price read from product_result.price_map.price&#xa;  (NOT top-level product_result.price — that field doesn&#39;t exist)" vertex="1">
+          <mxGeometry height="100" width="320" x="920" y="1360" as="geometry" />
+        </mxCell>
+        <mxCell id="e-e6-e6b" edge="1" parent="1" source="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" target="e6b" value="Walmart branch detail">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="Upsert store_pricing rows&#xa;(onConflict: store_id, product_id, source)" vertex="1">
           <mxGeometry height="60" width="320" x="420" y="1440" as="geometry" />

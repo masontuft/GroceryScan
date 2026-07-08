@@ -5,6 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBasketStore } from '../stores/basketStore';
 import { useLocationStore } from '../stores/locationStore';
+import { useStoreStore } from '../stores/storeStore';
 import { BasketItemRow } from '../components/BasketItemRow';
 import { TotalBreakdown } from '../components/TotalBreakdown';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -64,6 +65,10 @@ export function BasketScreen() {
   const { isConnected } = useNetworkStatus();
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
+  const stores = useStoreStore((s) => s.stores);
+  const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
+  const storeName = stores.find((s) => s.id === selectedStoreId)?.name ?? 'No Store';
+
   const localTotal = useLocalTotal(items, locationState, locationCity);
   const displayTotal = lastTotal ?? localTotal;
 
@@ -84,12 +89,32 @@ export function BasketScreen() {
     }, [items.length, displayTotal.estimatedTotal])
   );
 
+  const storeBanner = (
+    <TouchableOpacity
+      style={styles.storeBanner}
+      onPress={() => rootNav.navigate('StoreSelect')}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.storeBannerIcon}>🏪</Text>
+      <Text style={styles.storeBannerText}>{storeName}</Text>
+      <Text style={styles.storeBannerChange}>Change</Text>
+    </TouchableOpacity>
+  );
+
   if (items.length === 0) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyIcon}>🛒</Text>
-        <Text style={styles.emptyText}>Your basket is empty.</Text>
-        <Text style={styles.emptyHint}>Scan items to add them here.</Text>
+      <View style={styles.container}>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
+          </View>
+        )}
+        {storeBanner}
+        <View style={styles.empty}>
+          <Text style={styles.emptyIcon}>🛒</Text>
+          <Text style={styles.emptyText}>Your basket is empty.</Text>
+          <Text style={styles.emptyHint}>Scan items to add them here.</Text>
+        </View>
       </View>
     );
   }
@@ -101,6 +126,7 @@ export function BasketScreen() {
           <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
         </View>
       )}
+      {storeBanner}
       <BasketAnalysisModal
         visible={analysisVisible}
         onClose={() => setAnalysisVisible(false)}
@@ -228,4 +254,18 @@ const styles = StyleSheet.create({
   clearText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
   offlineBanner: { backgroundColor: '#f59e0b', padding: 8, alignItems: 'center' },
   offlineText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  storeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    margin: 12,
+    padding: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  storeBannerIcon: { fontSize: 16 },
+  storeBannerText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1e293b' },
+  storeBannerChange: { fontSize: 12, fontWeight: '700', color: '#2563eb' },
 });

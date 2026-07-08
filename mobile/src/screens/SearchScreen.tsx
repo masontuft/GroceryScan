@@ -18,6 +18,7 @@ export function SearchScreen({ navigation }: Props) {
   const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const locationState = useLocationStore((s) => s.state);
@@ -42,9 +43,11 @@ export function SearchScreen({ navigation }: Props) {
   };
 
   const handleSelect = async (product: Product) => {
+    if (resolvingId) return; // already resolving a tap — ignore rapid re-taps
     const barcode = product.upc ?? product.ean ?? product.barcode ?? product.gtin;
     if (!barcode) return;
     track('search_result_selected', { productId: product.id, productName: product.name, storeId: selectedStoreId });
+    setResolvingId(product.id);
     try {
       const scanResult = await resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip });
       navigation.navigate('ProductDetail', { scanResult, barcode });
@@ -53,6 +56,8 @@ export function SearchScreen({ navigation }: Props) {
       // feedback at all. A search result failing to resolve is unusual (it came
       // from our own DB), so it's always worth tracking, not just business misses.
       trackError('SearchScreen:handleSelect', err, { productId: product.id, barcode });
+    } finally {
+      setResolvingId(null);
     }
   };
 
@@ -85,10 +90,17 @@ export function SearchScreen({ navigation }: Props) {
         data={results}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.result} onPress={() => handleSelect(item)}>
-            <Text style={styles.resultName}>{item.name}</Text>
-            {item.brand && <Text style={styles.resultBrand}>{item.brand}</Text>}
-            {item.size && <Text style={styles.resultSize}>{item.size} {item.unit}</Text>}
+          <TouchableOpacity
+            style={[styles.result, styles.resultRow]}
+            onPress={() => handleSelect(item)}
+            disabled={resolvingId !== null}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.resultName}>{item.name}</Text>
+              {item.brand && <Text style={styles.resultBrand}>{item.brand}</Text>}
+              {item.size && <Text style={styles.resultSize}>{item.size} {item.unit}</Text>}
+            </View>
+            {resolvingId === item.id && <ActivityIndicator size="small" />}
           </TouchableOpacity>
         )}
       />
@@ -104,6 +116,7 @@ const styles = StyleSheet.create({
   btnText: { color: '#fff', fontWeight: '700' },
   empty: { textAlign: 'center', marginTop: 40, color: '#94a3b8', fontSize: 15 },
   result: { padding: 16, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  resultRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   resultName: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
   resultBrand: { fontSize: 13, color: '#64748b', marginTop: 2 },
   resultSize: { fontSize: 12, color: '#94a3b8', marginTop: 1 },
