@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { formatCurrency } from '../utils/formatCurrency';
 import { freshnessColor } from '../utils/freshness';
+import { parsePriceInput, isPriceOverCap, isPriceEntered } from '../utils/priceValidation';
 import type { FreshnessLabel } from '../types/pricing';
 
 interface Props {
@@ -31,9 +32,7 @@ export function PriceTag({ price, regularPrice, isOnSale, freshnessLabel, isStal
     setDraft('');
   };
 
-  const handleSave = async () => {
-    const parsed = parseFloat(draft.replace(/[^0-9.]/g, ''));
-    if (isNaN(parsed) || parsed <= 0) return;
+  const commitSave = async (parsed: number) => {
     setSaving(true);
     try {
       await onSave?.(parsed);
@@ -41,6 +40,23 @@ export function PriceTag({ price, regularPrice, isOnSale, freshnessLabel, isStal
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSave = () => {
+    const parsed = parsePriceInput(draft);
+    if (!isPriceEntered(parsed)) return;
+    if (isPriceOverCap(parsed)) {
+      Alert.alert(
+        'Confirm price',
+        `$${parsed.toFixed(2)} is unusually high for a grocery item. Save it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save anyway', onPress: () => commitSave(parsed) },
+        ]
+      );
+      return;
+    }
+    commitSave(parsed);
   };
 
   if (editing) {

@@ -76,7 +76,7 @@ export function BasketScreen() {
 
   useEffect(() => {
     if (isConnected && items.length > 0) recalculate();
-  }, [isConnected]);
+  }, [isConnected, locationState, locationZip]);
 
   useFocusEffect(
     useCallback(() => {
@@ -167,7 +167,7 @@ export function BasketScreen() {
               )}
             </TouchableOpacity>
 
-            <TotalBreakdown total={displayTotal} isEstimate={!lastTotal} />
+            <TotalBreakdown total={displayTotal} isEstimate={!lastTotal} hasLocation={Boolean(locationState)} />
             {loading && (
               <ActivityIndicator size="small" style={styles.recalcSpinner} />
             )}

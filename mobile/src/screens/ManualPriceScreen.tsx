@@ -19,6 +19,7 @@ import { useStoreStore } from '../stores/storeStore';
 import { submitManualEntry } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
 import type { RootStackParamList } from '../app/index';
 
 type Props = {
@@ -70,14 +71,13 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     if (stores.length === 0) fetchStores();
   }, []);
 
-  const parsedPrice = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-  const priceValid = !isNaN(parsedPrice) && parsedPrice > 0;
+  const parsedPrice = parsePriceInput(priceText);
+  const priceTooHigh = isPriceOverCap(parsedPrice);
   const isOther = pickedStoreId === OTHER_STORE_ID;
   const nameValid = productName.trim().length > 0;
-  const canAdd = priceValid && nameValid && (!isOther || customStoreName.trim().length > 0) && !submitting;
+  const canAdd = nameValid && isPriceEntered(parsedPrice) && (!isOther || customStoreName.trim().length > 0) && !submitting;
 
-  const handleAdd = async () => {
-    if (!canAdd) return;
+  const commitAdd = async () => {
     setSubmitting(true);
 
     try {
@@ -133,6 +133,22 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     }
   };
 
+  const handleAdd = () => {
+    if (!canAdd) return;
+    if (priceTooHigh) {
+      Alert.alert(
+        'Confirm price',
+        `$${parsedPrice.toFixed(2)} is unusually high for a grocery item. Add it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add anyway', onPress: () => commitAdd() },
+        ]
+      );
+      return;
+    }
+    commitAdd();
+  };
+
   const storeRows = [
     ...stores,
     { id: OTHER_STORE_ID, name: 'Other / not listed', chain: '', region: '' },
@@ -179,6 +195,9 @@ export function ManualPriceScreen({ navigation, route }: Props) {
               autoFocus={!productNameEditable}
             />
           </View>
+          {priceTooHigh && (
+            <Text style={styles.warning}>That's over ${MAX_REASONABLE_PRICE} — check the decimal point</Text>
+          )}
         </View>
 
         {/* ── Category — always shown; pre-selected from the normalized lookup category ── */}
@@ -324,6 +343,7 @@ const styles = StyleSheet.create({
   required: { color: '#ef4444' },
   sublabel: { fontSize: 12, fontWeight: '600', color: '#94a3b8', marginBottom: 4 },
   hint: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  warning: { fontSize: 12, color: '#f59e0b', fontWeight: '600', marginTop: 2 },
 
   productName: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
 
