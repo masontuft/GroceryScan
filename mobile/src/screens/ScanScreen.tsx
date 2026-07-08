@@ -35,6 +35,11 @@ export function ScanScreen({ navigation }: Props) {
   const [quickAdd, setQuickAdd] = useState<QuickAddData | null>(null);
   const lastScanned = useRef<string | null>(null);
   const cameraRef = useRef<CameraViewType>(null);
+  // CameraView unmounts/remounts on every focus change (see the `isFocused &&`
+  // guard below), spinning up a fresh native camera session each time. A ref
+  // (not state) is enough here — nothing renders off this, and a plain ref
+  // avoids an extra re-render on every readiness flip.
+  const cameraReadyRef = useRef(false);
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const addItem = useBasketStore((s) => s.addItem);
@@ -51,7 +56,27 @@ export function ScanScreen({ navigation }: Props) {
     lastScanned.current = null;
     setScanning(false);
     setQuickAdd(null);
+    cameraReadyRef.current = false;
+    // CameraView remounts on every focus gain — a readiness flag from the
+    // previous mount must not survive into the next one.
+    return () => { cameraReadyRef.current = false; };
   }, []));
+
+  // Expo's docs warn explicitly: calling takePictureAsync before onCameraReady,
+  // or while the preview is paused, throws on Android (iOS just degrades to
+  // the last on-screen frame instead). CameraView here remounts on every
+  // focus change, so a capture attempted shortly after regaining focus can
+  // hit the native session before it's actually warmed up — this is what
+  // produced the "Failed to capture image" exceptions. Poll briefly rather
+  // than failing instantly, since readiness is usually just milliseconds away.
+  const waitForCameraReady = async (maxWaitMs = 3000): Promise<boolean> => {
+    const start = Date.now();
+    while (!cameraReadyRef.current) {
+      if (Date.now() - start > maxWaitMs) return false;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return true;
+  };
 
   const handleBarcode = async (barcode: string) => {
     if (lastScanned.current === barcode || loading) return;
@@ -142,6 +167,7 @@ export function ScanScreen({ navigation }: Props) {
     if (!cameraRef.current) return;
     setOcrLoading(true);
     try {
+      if (!(await waitForCameraReady())) throw new Error('Camera not ready');
       const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
       if (!photo?.base64) throw new Error('No image captured');
 
@@ -191,6 +217,15 @@ export function ScanScreen({ navigation }: Props) {
       });
     } catch (err) {
       trackError('ScanScreen:handleScanPriceTag', err, { barcode });
+      // The two failure-prone steps inside the try (OCR, product lookup) both
+      // catch inline and never rethrow — anything reaching here is a camera
+      // capture failure. Previously this silently dropped the user onto a
+      // manual-entry form with a placeholder name and no explanation, which
+      // read as broken rather than as a fallback.
+      Alert.alert(
+        "Couldn't Read Price Tag",
+        "We weren't able to capture a photo of the price tag. Please enter the details manually."
+      );
       rootNav.navigate('ManualPrice', {
         productId: barcode,
         productName: `Item (${barcode})`,
@@ -207,6 +242,7 @@ export function ScanScreen({ navigation }: Props) {
   // and upgrades product info via extracted UPC if the sheet has no resolved product yet.
   const handleQuickAddScanTag = async () => {
     if (!cameraRef.current) throw new Error('No camera');
+    if (!(await waitForCameraReady())) throw new Error('Camera not ready');
     const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
     if (!photo?.base64) throw new Error('No image captured');
     const ocr = await ocrPriceTag(photo.base64);
@@ -318,6 +354,7 @@ export function ScanScreen({ navigation }: Props) {
           style={styles.camera}
           facing="back"
           barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8', 'code128'] }}
+          onCameraReady={() => { cameraReadyRef.current = true; }}
           onBarcodeScanned={scanning || ocrLoading || quickAdd !== null ? undefined : ({ data }) => {
             setScanning(true);
             handleBarcode(data).finally(() => setTimeout(() => setScanning(false), 2000));
