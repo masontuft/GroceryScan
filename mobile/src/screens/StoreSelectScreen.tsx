@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useStoreStore } from '../stores/storeStore';
+import { getCurrentCoords } from '../stores/locationStore';
+import type { Store } from '../services/api';
 import type { RootStackParamList } from '../app/index';
 
 type Props = {
@@ -14,11 +16,32 @@ export function StoreSelectScreen({ navigation }: Props) {
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const fetchStores = useStoreStore((s) => s.fetchStores);
   const selectStore = useStoreStore((s) => s.selectStore);
+  const resolveNearbyWalmart = useStoreStore((s) => s.resolveNearbyWalmart);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => { fetchStores(); }, []);
 
-  const handleSelect = (id: string) => {
-    selectStore(id);
+  const isWalmartPlaceholder = (item: Store) => item.chain === 'walmart' && item.locationId === null;
+
+  const handleSelect = async (item: Store) => {
+    if (isWalmartPlaceholder(item)) {
+      setResolving(true);
+      const coords = await getCurrentCoords();
+      if (!coords) {
+        setResolving(false);
+        Alert.alert('Location needed', 'Enable location access to find your nearest Walmart.');
+        return;
+      }
+      const resolved = await resolveNearbyWalmart(coords[0], coords[1]);
+      setResolving(false);
+      if (!resolved) {
+        Alert.alert('No Walmart found', 'Could not find a nearby Walmart store. Please try again later.');
+        return;
+      }
+      navigation.goBack();
+      return;
+    }
+    selectStore(item.id);
     navigation.goBack();
   };
 
@@ -30,13 +53,21 @@ export function StoreSelectScreen({ navigation }: Props) {
         data={stores}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.row, item.id === selectedStoreId && styles.selected]} onPress={() => handleSelect(item.id)}>
+          <TouchableOpacity
+            style={[styles.row, item.id === selectedStoreId && styles.selected]}
+            onPress={() => handleSelect(item)}
+            disabled={resolving}
+          >
             <View>
               <Text style={styles.chain}>{item.chain.toUpperCase()}</Text>
               <Text style={styles.name}>{item.name}</Text>
               {item.region && <Text style={styles.region}>{item.region}</Text>}
             </View>
-            {item.id === selectedStoreId && <Text style={styles.check}>✓</Text>}
+            {isWalmartPlaceholder(item) && resolving ? (
+              <ActivityIndicator />
+            ) : (
+              item.id === selectedStoreId && <Text style={styles.check}>✓</Text>
+            )}
           </TouchableOpacity>
         )}
         ListEmptyComponent={!loading ? <Text style={styles.empty}>No stores available.</Text> : null}

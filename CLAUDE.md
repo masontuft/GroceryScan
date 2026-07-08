@@ -63,10 +63,20 @@ supabase functions deploy scan-resolve
 supabase functions deploy basket-recalculate
 supabase functions deploy products-search
 supabase functions deploy stores-list
+supabase functions deploy resolve-nearby-store
 
 # Seed sample stores + test product
 supabase db seed
+
+# One-time (and periodic, e.g. quarterly) import of the Walmart store
+# reference data that resolve-nearby-store looks up against — geocodes
+# SerpApi's static walmart-stores.json via the free Census Bureau batch
+# geocoder. Not deployed as a function; run manually.
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  deno run --allow-net --allow-env supabase/scripts/import-walmart-store-reference.ts
 ```
+
+`SERPAPI_KEY` gates `SerpApiWalmartProvider` (Walmart pricing) — the provider code is fully implemented but returns no prices until this secret is actually set. Get a key from serpapi.com and run the `supabase secrets set SERPAPI_KEY=...` command above to activate it.
 
 ## Architecture
 

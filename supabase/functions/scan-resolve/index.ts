@@ -260,7 +260,7 @@ Deno.serve(async (req) => {
   );
 
   const pricingResults = await Promise.allSettled(
-    matchingProviders.map((p) => p.fetchPrice(barcode, storeLocationId))
+    matchingProviders.map((p) => p.fetchPrice(barcode, storeLocationId, { name: product.name, brand: product.brand }))
   );
 
   const freshPricing = pricingResults
