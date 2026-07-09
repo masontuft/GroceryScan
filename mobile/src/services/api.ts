@@ -27,6 +27,47 @@ export interface ScanResult {
   confidence: number;
 }
 
+// Thrown by invokeFunction on any Edge Function failure, carrying enough structure
+// (endpoint, HTTP status, raw body) for callers to distinguish "not found" from
+// "network/server failure" and for PostHog to get a machine-readable exception
+// instead of a bare "non-2xx" message.
+export class EdgeFunctionError extends Error {
+  readonly endpoint: string;
+  readonly status: number | null;
+  readonly body: string | null;
+
+  constructor(endpoint: string, status: number | null, body: string | null, message: string) {
+    super(message);
+    this.name = 'EdgeFunctionError';
+    this.endpoint = endpoint;
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function invokeFunction<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(endpoint, { body });
+  if (!error) return data as T;
+
+  // FunctionsHttpError carries the raw Response on `error.context`; other
+  // Supabase function error types (relay/network failures) don't.
+  const ctx = (error as unknown as { context?: Response }).context;
+  if (!(ctx instanceof Response)) {
+    throw new EdgeFunctionError(endpoint, null, null, error.message);
+  }
+
+  const bodyText = await ctx.text().catch(() => null);
+  let serverMessage: string | null = null;
+  if (bodyText) {
+    try {
+      serverMessage = (JSON.parse(bodyText) as { error?: string }).error ?? null;
+    } catch {
+      // Body wasn't JSON — bodyText is still attached to the thrown error below.
+    }
+  }
+  throw new EdgeFunctionError(endpoint, ctx.status, bodyText, serverMessage ?? error.message);
+}
+
 export interface Store {
   id: string;
   chain: string;
@@ -40,11 +81,7 @@ export async function resolveBarcode(
   storeId: string | null,
   location: { state: string | null; zip: string | null }
 ): Promise<ScanResult> {
-  const { data, error } = await supabase.functions.invoke('scan-resolve', {
-    body: { barcode, storeId, location },
-  });
-  if (error) throw error;
-  return data as ScanResult;
+  return invokeFunction<ScanResult>('scan-resolve', { barcode, storeId, location });
 }
 
 export async function recalculateBasket(
@@ -52,11 +89,7 @@ export async function recalculateBasket(
   items: BasketItem[],
   location: { state: string | null; zip: string | null }
 ): Promise<BasketTotal> {
-  const { data, error } = await supabase.functions.invoke('basket-recalculate', {
-    body: { storeId, items, location },
-  });
-  if (error) throw error;
-  return data as BasketTotal;
+  return invokeFunction<BasketTotal>('basket-recalculate', { storeId, items, location });
 }
 
 export async function searchProducts(q: string, _storeId: string | null): Promise<Product[]> {
@@ -93,23 +126,7 @@ export async function submitManualEntry(args: {
   unit?: string | null;
   categories?: string[] | null;
 }): Promise<{ productId: string; storeId: string | null }> {
-  const { data, error } = await supabase.functions.invoke('manual-submit', { body: args });
-  if (error) {
-    // FunctionsHttpError carries the raw Response in `error.context`.
-    // Try to pull the JSON body so the real server-side message is shown.
-    const ctx = (error as unknown as { context?: Response }).context;
-    if (ctx instanceof Response) {
-      try {
-        const body = await ctx.json() as { error?: string };
-        if (body.error) throw new Error(body.error);
-      } catch (parseErr) {
-        if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
-        trackError('submitManualEntry:parseErrorBody', parseErr);
-      }
-    }
-    throw error;
-  }
-  return data as { productId: string; storeId: string | null };
+  return invokeFunction<{ productId: string; storeId: string | null }>('manual-submit', args);
 }
 
 /**
@@ -177,11 +194,7 @@ export async function lookupProductByBarcode(barcode: string): Promise<ScanResul
 }
 
 export async function ocrPriceTag(imageBase64: string): Promise<{ price: number | null; productName: string | null; rawText: string; extractedUpc: string | null }> {
-  const { data, error } = await supabase.functions.invoke('ocr-price', {
-    body: { imageBase64 },
-  });
-  if (error) throw error;
-  return data as { price: number | null; productName: string | null; rawText: string; extractedUpc: string | null };
+  return invokeFunction('ocr-price', { imageBase64 });
 }
 
 /**
@@ -196,14 +209,10 @@ export async function resolveNearbyStore(args: {
   lng: number;
 }): Promise<Store | null> {
   try {
-    const { data, error } = await supabase.functions.invoke('resolve-nearby-store', { body: args });
-    if (error) {
-      trackError('resolveNearbyStore', error);
-      return null;
-    }
-    return (data as { store: Store | null }).store ?? null;
+    const data = await invokeFunction<{ store: Store | null }>('resolve-nearby-store', args);
+    return data.store ?? null;
   } catch (err) {
-    trackError('resolveNearbyStore', err);
+    trackError('resolveNearbyStore', err, err instanceof EdgeFunctionError ? { endpoint: err.endpoint, status: err.status } : undefined);
     return null;
   }
 }

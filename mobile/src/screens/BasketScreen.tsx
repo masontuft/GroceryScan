@@ -54,6 +54,7 @@ export function BasketScreen() {
   const items = useBasketStore((s) => s.items);
   const lastTotal = useBasketStore((s) => s.lastTotal);
   const loading = useBasketStore((s) => s.loading);
+  const recalcError = useBasketStore((s) => s.recalcError);
   const clearBasket = useBasketStore((s) => s.clearBasket);
   const removeItem = useBasketStore((s) => s.removeItem);
   const updateQuantity = useBasketStore((s) => s.updateQuantity);
@@ -70,7 +71,9 @@ export function BasketScreen() {
   const storeName = stores.find((s) => s.id === selectedStoreId)?.name ?? 'No Store';
 
   const localTotal = useLocalTotal(items, locationState, locationCity);
-  const displayTotal = lastTotal ?? localTotal;
+  // When the last server recalc failed, lastTotal is stale (may not reflect
+  // the current basket contents) — prefer the fresh local estimate instead.
+  const displayTotal = recalcError ? localTotal : lastTotal ?? localTotal;
 
   const sections = useMemo(() => groupByCategory(items), [items]);
 
@@ -167,7 +170,15 @@ export function BasketScreen() {
               )}
             </TouchableOpacity>
 
-            <TotalBreakdown total={displayTotal} isEstimate={!lastTotal} hasLocation={Boolean(locationState)} />
+            {recalcError && !loading && (
+              <View style={styles.recalcErrorBanner}>
+                <Text style={styles.recalcErrorText}>Couldn't update totals — showing local estimate</Text>
+                <TouchableOpacity onPress={() => recalculate()} accessibilityLabel="Retry updating totals" accessibilityRole="button">
+                  <Text style={styles.recalcErrorRetry}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <TotalBreakdown total={displayTotal} isEstimate={!lastTotal || recalcError} hasLocation={Boolean(locationState)} />
             {loading && (
               <ActivityIndicator size="small" style={styles.recalcSpinner} />
             )}
@@ -227,6 +238,19 @@ const styles = StyleSheet.create({
   sectionCount: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
   footer: { padding: 16, gap: 12 },
   recalcSpinner: { alignSelf: 'center' },
+  recalcErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  recalcErrorText: { flex: 1, fontSize: 13, color: '#92400e', fontWeight: '500' },
+  recalcErrorRetry: { fontSize: 13, color: '#2563eb', fontWeight: '700', marginLeft: 8 },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',

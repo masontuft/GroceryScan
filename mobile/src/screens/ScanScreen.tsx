@@ -22,6 +22,18 @@ function isWincoStore(stores: { id: string; chain: string }[], storeId: string |
   return stores.find((s) => s.id === storeId)?.chain?.toLowerCase().includes('winco') ?? false;
 }
 
+// expo-camera's takePictureAsync occasionally throws "Failed to capture image" on Android
+// even after the camera reports ready — a brief, one-time retry clears it in practice.
+// skipProcessing on the retry avoids re-triggering whatever native post-processing step failed.
+async function captureWithRetry(camera: CameraViewType, options: { base64: boolean; quality: number }) {
+  try {
+    return { photo: await camera.takePictureAsync(options), attempts: 1 };
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { photo: await camera.takePictureAsync({ ...options, skipProcessing: true }), attempts: 2 };
+  }
+}
+
 type Props = {
   navigation: NativeStackNavigationProp<ScanStackParamList, 'Scan'>;
 };
@@ -40,6 +52,10 @@ export function ScanScreen({ navigation }: Props) {
   // (not state) is enough here — nothing renders off this, and a plain ref
   // avoids an extra re-render on every readiness flip.
   const cameraReadyRef = useRef(false);
+  // Lets the stable onBarcodeScanned callback below read current suppress/handler
+  // state without itself being recreated — see the comment at its declaration.
+  const suppressScanRef = useRef(false);
+  const handleBarcodeRef = useRef<(barcode: string) => Promise<void>>(async () => {});
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const addItem = useBasketStore((s) => s.addItem);
@@ -107,7 +123,13 @@ export function ScanScreen({ navigation }: Props) {
         navigation.navigate('ProductDetail', { scanResult: result, barcode });
       }
     } catch (err) {
-      track('barcode_scanned', { barcode, found: false, storeId: selectedStoreId });
+      track('barcode_scanned', {
+        barcode,
+        found: false,
+        storeId: selectedStoreId,
+        failureReason: err instanceof ProductNotFoundError ? err.reason : 'network_error',
+        status: err instanceof ProductNotFoundError ? err.status : null,
+      });
       if (isWinco) {
         // Show sheet even if lookup failed — user can type name + scan tag for price
         setQuickAdd({
@@ -163,12 +185,33 @@ export function ScanScreen({ navigation }: Props) {
     }
   };
 
+  // Kept up to date every render so the stable onBarcodeScanned callback below
+  // never has to be recreated (and never has to become `undefined`) just because
+  // scanning/ocrLoading/quickAdd changed — see that callback's comment.
+  handleBarcodeRef.current = handleBarcode;
+  suppressScanRef.current = scanning || ocrLoading || quickAdd !== null;
+
+  // CameraView previously received `undefined` in place of this callback while
+  // suppressed, which on Android forces a native camera reconfiguration — and that
+  // reconfiguration racing with an in-flight takePictureAsync() call is what produced
+  // the "Failed to capture image" exceptions. Passing a callback with a stable identity
+  // (never undefined, never recreated) avoids that churn; gating happens internally
+  // via suppressScanRef instead of by swapping the prop.
+  const onBarcodeScanned = useCallback(({ data }: { data: string }) => {
+    if (suppressScanRef.current) return;
+    setScanning(true);
+    handleBarcodeRef.current(data).finally(() => setTimeout(() => setScanning(false), 2000));
+  }, []);
+
   const handleScanPriceTag = async (barcode: string) => {
     if (!cameraRef.current) return;
+    const camera = cameraRef.current;
     setOcrLoading(true);
+    let captureAttempts = 0;
     try {
       if (!(await waitForCameraReady())) throw new Error('Camera not ready');
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
+      const { photo, attempts } = await captureWithRetry(camera, { base64: true, quality: 0.6 });
+      captureAttempts = attempts;
       if (!photo?.base64) throw new Error('No image captured');
 
       // Step 1: OCR the price tag.
@@ -192,8 +235,11 @@ export function ScanScreen({ navigation }: Props) {
 
       track('price_tag_scanned', {
         success: Boolean(ocr.price !== null),
+        failureReason: ocr.price === null ? 'ocr_failed' : null,
         hasExtractedUpc: Boolean(ocr.extractedUpc),
         storeId: selectedStoreId,
+        captureAttempts,
+        flow: 'not_found_fallback',
       });
 
       // Prefer database product name/brand/categories over Vision text.
@@ -216,7 +262,8 @@ export function ScanScreen({ navigation }: Props) {
           : undefined,
       });
     } catch (err) {
-      trackError('ScanScreen:handleScanPriceTag', err, { barcode });
+      trackError('ScanScreen:handleScanPriceTag', err, { barcode, captureAttempts, cameraReady: cameraReadyRef.current });
+      track('price_tag_scanned', { success: false, failureReason: 'capture_failed', storeId: selectedStoreId, captureAttempts });
       // The two failure-prone steps inside the try (OCR, product lookup) both
       // catch inline and never rethrow — anything reaching here is a camera
       // capture failure. Previously this silently dropped the user onto a
@@ -240,12 +287,30 @@ export function ScanScreen({ navigation }: Props) {
 
   // OCR callback used by QuickAddSheet — captures a photo, returns Vision result,
   // and upgrades product info via extracted UPC if the sheet has no resolved product yet.
+  // This is the primary price-tag-scanning flow (Winco quick-add); previously it never
+  // emitted price_tag_scanned at all, which is why that event had zero occurrences in PostHog.
   const handleQuickAddScanTag = async () => {
     if (!cameraRef.current) throw new Error('No camera');
+    const camera = cameraRef.current;
     if (!(await waitForCameraReady())) throw new Error('Camera not ready');
-    const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.6 });
-    if (!photo?.base64) throw new Error('No image captured');
+    let photo: Awaited<ReturnType<typeof captureWithRetry>>['photo'];
+    let captureAttempts = 1;
+    try {
+      ({ photo, attempts: captureAttempts } = await captureWithRetry(camera, { base64: true, quality: 0.6 }));
+      if (!photo?.base64) throw new Error('No image captured');
+    } catch (err) {
+      trackError('ScanScreen:handleQuickAddScanTag', err, { captureAttempts });
+      track('price_tag_scanned', { success: false, failureReason: 'capture_failed', storeId: selectedStoreId, captureAttempts, flow: 'winco_quick_add' });
+      throw err;
+    }
     const ocr = await ocrPriceTag(photo.base64);
+    track('price_tag_scanned', {
+      success: ocr.price !== null,
+      failureReason: ocr.price === null ? 'ocr_failed' : null,
+      storeId: selectedStoreId,
+      captureAttempts,
+      flow: 'winco_quick_add',
+    });
     // If we have an extracted UPC and the sheet hasn't resolved a product yet,
     // do a silent lookup and upgrade the sheet's data.
     if (ocr.extractedUpc && quickAdd && !quickAdd.productId) {
@@ -355,10 +420,7 @@ export function ScanScreen({ navigation }: Props) {
           facing="back"
           barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8', 'code128'] }}
           onCameraReady={() => { cameraReadyRef.current = true; }}
-          onBarcodeScanned={scanning || ocrLoading || quickAdd !== null ? undefined : ({ data }) => {
-            setScanning(true);
-            handleBarcode(data).finally(() => setTimeout(() => setScanning(false), 2000));
-          }}
+          onBarcodeScanned={onBarcodeScanned}
         >
           <View style={styles.overlay}>
             <View style={styles.scanFrame} />
