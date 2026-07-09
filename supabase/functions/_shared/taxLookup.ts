@@ -1,4 +1,7 @@
-import taxRates from '../../../mobile/src/constants/taxRates.json' with { type: 'json' };
+// Kept in sync manually with mobile/src/constants/taxRates.json (mobile's copy is used for
+// the client-side useLocalTotal estimate). Edge functions can't import outside their deploy
+// boundary, so this is a local copy rather than a shared reference.
+import taxRates from './taxRates.json' with { type: 'json' };
 
 interface TaxRate {
   state: string;

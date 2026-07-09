@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { recalculateBasket } from '../services/api';
+import { recalculateBasket, EdgeFunctionError } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import { useLocationStore } from './locationStore';
 import type { BasketItem, BasketTotal } from '../types/basket';
@@ -11,6 +11,9 @@ interface BasketState {
   storeId: string | null;
   lastTotal: BasketTotal | null;
   loading: boolean;
+  // Set when the last recalculate() call failed — lastTotal is stale when true,
+  // so the UI should prefer the locally-computed estimate and offer a retry.
+  recalcError: boolean;
 
   addItem: (item: BasketItem) => void;
   removeItem: (productId: string) => void;
@@ -28,6 +31,7 @@ export const useBasketStore = create<BasketState>()(
       storeId: null,
       lastTotal: null,
       loading: false,
+      recalcError: false,
 
       addItem: (item) => {
         set((state) => {
@@ -88,7 +92,7 @@ export const useBasketStore = create<BasketState>()(
           set({ lastTotal: { subtotal: 0, discounts: 0, tax: 0, estimatedTotal: 0 } });
           return;
         }
-        set({ loading: true });
+        set({ loading: true, recalcError: false });
         try {
           // Read directly from locationStore rather than keeping a local copy —
           // a separate `location` field here previously went stale forever
@@ -97,12 +101,17 @@ export const useBasketStore = create<BasketState>()(
           // the user's actual location.
           const { state, zip } = useLocationStore.getState();
           const total = await recalculateBasket(storeId, items, { state, zip });
-          set({ lastTotal: total, loading: false });
+          set({ lastTotal: total, loading: false, recalcError: false });
         } catch (err) {
-          // keep last known total on error, but the user sees a silently stale
-          // total with no indication anything failed unless this reaches PostHog
-          trackError('basketStore:recalculate', err, { itemCount: items.length, storeId });
-          set({ loading: false });
+          // Keep last known total in state (some screens may still read it), but
+          // recalcError tells the UI it's stale so it can fall back to a local
+          // estimate and offer a retry instead of showing a silently wrong total.
+          trackError('basketStore:recalculate', err, {
+            itemCount: items.length,
+            storeId,
+            ...(err instanceof EdgeFunctionError ? { endpoint: err.endpoint, status: err.status } : {}),
+          });
+          set({ loading: false, recalcError: true });
         }
       },
     }),

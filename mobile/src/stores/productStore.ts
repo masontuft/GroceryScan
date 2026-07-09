@@ -1,16 +1,22 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { resolveBarcode, lookupProductByBarcode, type ScanResult } from '../services/api';
+import { resolveBarcode, lookupProductByBarcode, EdgeFunctionError, type ScanResult } from '../services/api';
 import { trackError } from '../services/analytics';
 import type { Product } from '../types/product';
 
+export type ProductNotFoundReason = 'not_found' | 'server_error' | 'network_error';
+
 export class ProductNotFoundError extends Error {
   suggestions: Product[];
-  constructor(suggestions: Product[]) {
+  reason: ProductNotFoundReason;
+  status: number | null;
+  constructor(suggestions: Product[], reason: ProductNotFoundReason, status: number | null = null) {
     super('UNKNOWN_BARCODE');
     this.name = 'ProductNotFoundError';
     this.suggestions = suggestions;
+    this.reason = reason;
+    this.status = status;
   }
 }
 
@@ -71,22 +77,33 @@ export const useProductStore = create<ProductState>()(
               return { cache: next };
             });
 
-            // Extract fuzzy suggestions from the 404 response body if available.
+            // Extract fuzzy suggestions from the 404 response body if available, and
+            // distinguish a genuine "not found" from a network/server failure that
+            // was previously indistinguishable in PostHog's barcode_scanned data.
             let suggestions: Product[] = [];
-            try {
-              const ctx = (err as { context?: Response }).context;
-              if (ctx instanceof Response) {
-                const body = await ctx.json() as { suggestions?: Product[] };
-                suggestions = body.suggestions ?? [];
-              } else {
-                // No structured 404 response — this isn't a clean "not found," it's
-                // more likely a network/unexpected failure masquerading as one.
-                trackError('resolveProduct:unexpectedFailure', err, { barcode });
+            let reason: ProductNotFoundReason = 'network_error';
+
+            if (err instanceof EdgeFunctionError && err.status === 404) {
+              reason = 'not_found';
+              if (err.body) {
+                try {
+                  suggestions = (JSON.parse(err.body) as { suggestions?: Product[] }).suggestions ?? [];
+                } catch (parseErr) {
+                  trackError('resolveProduct:parse404Body', parseErr, { barcode });
+                }
               }
-            } catch (parseErr) {
-              trackError('resolveProduct:parse404Body', parseErr, { barcode });
+            } else if (err instanceof EdgeFunctionError && err.status !== null) {
+              reason = 'server_error';
+              trackError('resolveProduct:unexpectedFailure', err, { barcode, status: err.status });
+            } else {
+              trackError('resolveProduct:unexpectedFailure', err, { barcode });
             }
-            throw new ProductNotFoundError(suggestions);
+
+            throw new ProductNotFoundError(
+              suggestions,
+              reason,
+              err instanceof EdgeFunctionError ? err.status : null
+            );
           }
         }
 

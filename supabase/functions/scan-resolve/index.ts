@@ -69,7 +69,14 @@ Deno.serve(async (req) => {
   const orExpr = variants
     .flatMap((v) => [`barcode.eq.${v}`, `upc.eq.${v}`, `ean.eq.${v}`, `gtin.eq.${v}`])
     .join(',');
-  const { data: existing } = await db.from('products').select('*').or(orExpr).maybeSingle();
+  // .maybeSingle() errors (and the error was previously discarded) whenever more than
+  // one row matches — plausible here since the OR spans four columns across several
+  // barcode variants, unlike the single-column `upc` lookups below. That silently
+  // treated an existing product as "not found," sending it through the external
+  // provider fallbacks and sometimes back out as a spurious 404.
+  const { data: existingRows, error: existingErr } = await db.from('products').select('*').or(orExpr).limit(1);
+  if (existingErr) console.error('scan-resolve: products lookup error', JSON.stringify(existingErr));
+  const existing = existingRows?.[0] ?? null;
 
   const upcitemdbOfferPricing: Array<{ chain: string; result: StorePricingResult }> = [];
 
