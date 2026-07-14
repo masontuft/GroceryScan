@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -105,9 +105,6 @@ export function AppAlertProvider() {
                     style={[
                       styles.button,
                       isMultipleButtons && styles.buttonStacked,
-                      isDestructive && styles.buttonDestructive,
-                      isCancel && styles.buttonCancel,
-                      !isDestructive && !isCancel && styles.buttonDefault,
                     ]}
                     onPress={() => handleButtonPress(button)}
                   >
@@ -183,20 +180,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
+    backgroundColor: '#f1f5f9',
     flex: 1,
   },
   buttonStacked: {
     flex: 1,
     minHeight: 44,
-  },
-  buttonDefault: {
-    backgroundColor: '#f1f5f9',
-  },
-  buttonCancel: {
-    backgroundColor: '#f1f5f9',
-  },
-  buttonDestructive: {
-    backgroundColor: '#f1f5f9',
   },
   buttonText: {
     fontSize: 15,
