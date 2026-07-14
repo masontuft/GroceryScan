@@ -7,8 +7,8 @@ import {
   Switch,
   ScrollView,
   StyleSheet,
-  Alert,
 } from 'react-native';
+import { AppAlert } from './AppAlert';
 import { formatCurrency } from '../utils/formatCurrency';
 import { STANDARD_CATEGORIES } from '../utils/normalizeCategory';
 import { parsePriceInput, isPriceOverCap, isPriceEntered } from '../utils/priceValidation';
@@ -50,7 +50,7 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
   const handleSave = () => {
     const price = parsePriceInput(editPrice);
     if (isPriceOverCap(price)) {
-      Alert.alert(
+      AppAlert.alert(
         'Confirm price',
         `$${price.toFixed(2)} is unusually high for a grocery item. Save it anyway?`,
         [

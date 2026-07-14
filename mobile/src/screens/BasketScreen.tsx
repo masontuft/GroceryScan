@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, View, Text, SectionList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, SectionList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { BasketAnalysisModal } from '../components/BasketAnalysisModal';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AppAlert } from '../components/AppAlert';
 import { useBasketStore } from '../stores/basketStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useStoreStore } from '../stores/storeStore';
@@ -197,7 +198,7 @@ export function BasketScreen() {
             <TouchableOpacity
               style={styles.clearBtn}
               onPress={() =>
-                Alert.alert(
+                AppAlert.alert(
                   'Clear Basket',
                   'Remove all items from your basket?',
                   [

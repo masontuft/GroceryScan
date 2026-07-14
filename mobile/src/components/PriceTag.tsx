@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { AppAlert } from './AppAlert';
 import { formatCurrency } from '../utils/formatCurrency';
 import { freshnessColor } from '../utils/freshness';
 import { parsePriceInput, isPriceOverCap, isPriceEntered } from '../utils/priceValidation';
@@ -46,7 +47,7 @@ export function PriceTag({ price, regularPrice, isOnSale, freshnessLabel, isStal
     const parsed = parsePriceInput(draft);
     if (!isPriceEntered(parsed)) return;
     if (isPriceOverCap(parsed)) {
-      Alert.alert(
+      AppAlert.alert(
         'Confirm price',
         `$${parsed.toFixed(2)} is unusually high for a grocery item. Save it anyway?`,
         [

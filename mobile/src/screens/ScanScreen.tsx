@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraView as CameraViewType } from 'expo-camera';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,6 +7,7 @@ import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/n
 import { useProductStore, ProductNotFoundError } from '../stores/productStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
+import { AppAlert } from '../components/AppAlert';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
 import { ocrPriceTag } from '../services/api';
@@ -140,9 +141,9 @@ export function ScanScreen({ navigation }: Props) {
             }),
           },
         ];
-        Alert.alert('Did you mean?', "We couldn't find that exact barcode. Is this what you're scanning?", buttons);
+        AppAlert.alert('Did you mean?', "We couldn't find that exact barcode. Is this what you're scanning?", buttons);
       } else {
-        Alert.alert(
+        AppAlert.alert(
           "Couldn't identify this item",
           'Scan the price tag to capture its price, or enter it manually.',
           [
@@ -246,7 +247,7 @@ export function ScanScreen({ navigation }: Props) {
       // capture failure. Previously this silently dropped the user onto a
       // manual-entry form with a placeholder name and no explanation, which
       // read as broken rather than as a fallback.
-      Alert.alert(
+      AppAlert.alert(
         "Couldn't Read Price Tag",
         "We weren't able to capture a photo of the price tag. Please enter the details manually."
       );

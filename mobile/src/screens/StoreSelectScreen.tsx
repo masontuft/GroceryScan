@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useStoreStore } from '../stores/storeStore';
 import { getCurrentCoords } from '../stores/locationStore';
+import { AppAlert } from '../components/AppAlert';
 import type { Store } from '../services/api';
 import type { RootStackParamList } from '../app/index';
 
@@ -29,13 +30,13 @@ export function StoreSelectScreen({ navigation }: Props) {
       const coords = await getCurrentCoords();
       if (!coords) {
         setResolving(false);
-        Alert.alert('Location needed', 'Enable location access to find your nearest Walmart.');
+        AppAlert.alert('Location needed', 'Enable location access to find your nearest Walmart.');
         return;
       }
       const resolved = await resolveNearbyWalmart(coords[0], coords[1]);
       setResolving(false);
       if (!resolved) {
-        Alert.alert('No Walmart found', 'Could not find a nearby Walmart store. Please try again later.');
+        AppAlert.alert('No Walmart found', 'Could not find a nearby Walmart store. Please try again later.');
         return;
       }
       navigation.goBack();
