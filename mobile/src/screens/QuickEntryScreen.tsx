@@ -10,11 +10,11 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
+import { AppAlert } from '../components/AppAlert';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES } from '../utils/normalizeCategory';
 import { track } from '../services/analytics';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -84,7 +84,7 @@ export function QuickEntryScreen() {
   const handleAdd = () => {
     if (!canAdd) return;
     if (priceTooHigh) {
-      Alert.alert(
+      AppAlert.alert(
         'Confirm price',
         `$${parsedPrice.toFixed(2)} is unusually high for a grocery item. Add it anyway?`,
         [

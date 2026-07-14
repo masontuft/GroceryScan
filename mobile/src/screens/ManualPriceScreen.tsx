@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +16,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
+import { AppAlert } from '../components/AppAlert';
 import { submitManualEntry } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
@@ -124,13 +124,13 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         category: selectedCategory,
       });
 
-      Alert.alert('Added', `${productName.trim()} added to basket.`, [
+      AppAlert.alert('Added', `${productName.trim()} added to basket.`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
       trackError('ManualPriceScreen:handleAdd', err, { productId, storeId: isOther ? null : pickedStoreId });
       const message = err instanceof Error ? err.message : String(err);
-      Alert.alert('Error', `Could not save item: ${message}`);
+      AppAlert.alert('Error', `Could not save item: ${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -139,7 +139,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const handleAdd = () => {
     if (!canAdd) return;
     if (priceTooHigh) {
-      Alert.alert(
+      AppAlert.alert(
         'Confirm price',
         `$${parsedPrice.toFixed(2)} is unusually high for a grocery item. Add it anyway?`,
         [

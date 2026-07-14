@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert, FlatList } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
 import { NutritionPanel } from '../components/NutritionPanel';
+import { AppAlert } from '../components/AppAlert';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
@@ -90,7 +91,7 @@ export function ProductDetailScreen({ route }: Props) {
   const handleSavePrice = async (newPrice: number) => {
     const storeId = computedBest.source?.storeId ?? selectedStoreId;
     if (!storeId) {
-      Alert.alert('No store selected', 'Pick a store from the Basket tab before updating a price.');
+      AppAlert.alert('No store selected', 'Pick a store from the Basket tab before updating a price.');
       return;
     }
     try {
@@ -99,13 +100,13 @@ export function ProductDetailScreen({ route }: Props) {
     } catch (err) {
       trackError('ProductDetailScreen:handleSavePrice', err, { productId: product.id, storeId });
       const message = err instanceof Error ? err.message : String(err);
-      Alert.alert('Error', `Could not save price: ${message}`);
+      AppAlert.alert('Error', `Could not save price: ${message}`);
     }
   };
 
   const handleAddToBasket = () => {
     if (best.price === null) {
-      Alert.alert('No price available', 'Cannot add item without a known price.');
+      AppAlert.alert('No price available', 'Cannot add item without a known price.');
       return;
     }
     const category = normalizeCategory(product.categories[0]);
@@ -121,7 +122,7 @@ export function ProductDetailScreen({ route }: Props) {
       imageUrl: product.imageUrl,
       category,
     });
-    Alert.alert('Added', `${product.name} added to basket.`);
+    AppAlert.alert('Added', `${product.name} added to basket.`);
   };
 
   return (

@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   Share,
   Platform,
@@ -14,6 +13,7 @@ import Constants from 'expo-constants';
 import { useProductStore } from '../stores/productStore';
 import { useBasketStore } from '../stores/basketStore';
 import { useLocationStore } from '../stores/locationStore';
+import { AppAlert } from '../components/AppAlert';
 import { analyticsEnvironment } from '../services/analytics';
 
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL as string) ?? '(not set)';
@@ -62,7 +62,7 @@ export function DevScreen() {
   }, [cache]);
 
   function handleClearProductCache() {
-    Alert.alert(
+    AppAlert.alert(
       'Clear Product Cache',
       `Remove ${stats.count} cached product(s)? Next scan will fetch fresh data from the server.`,
       [
@@ -72,7 +72,7 @@ export function DevScreen() {
           style: 'destructive',
           onPress: () => {
             clearCache();
-            Alert.alert('Done', 'Product cache cleared.');
+            AppAlert.alert('Done', 'Product cache cleared.');
           },
         },
       ],
@@ -80,7 +80,7 @@ export function DevScreen() {
   }
 
   function handleClearBasket() {
-    Alert.alert(
+    AppAlert.alert(
       'Clear Basket',
       'Remove all items from your basket?',
       [
@@ -97,7 +97,7 @@ export function DevScreen() {
   }
 
   function handleClearLocation() {
-    Alert.alert(
+    AppAlert.alert(
       'Clear Location',
       'Remove saved location data?',
       [
@@ -108,7 +108,7 @@ export function DevScreen() {
   }
 
   function handleClearAllStorage() {
-    Alert.alert(
+    AppAlert.alert(
       'Clear All App Data',
       'This resets ALL app data including store selection and location. The app will need to be set up again.',
       [
@@ -118,7 +118,7 @@ export function DevScreen() {
           style: 'destructive',
           onPress: async () => {
             await AsyncStorage.clear();
-            Alert.alert('Done', 'All app data cleared. Please restart the app.');
+            AppAlert.alert('Done', 'All app data cleared. Please restart the app.');
           },
         },
       ],
@@ -136,7 +136,7 @@ export function DevScreen() {
     try {
       await Share.share({ message: info });
     } catch {
-      Alert.alert('Error', 'Could not share device info.');
+      AppAlert.alert('Error', 'Could not share device info.');
     }
   }
 
