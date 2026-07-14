@@ -17,6 +17,7 @@ import { LocationScreen } from '../screens/LocationScreen';
 import { ManualPriceScreen } from '../screens/ManualPriceScreen';
 import { QuickEntryScreen } from '../screens/QuickEntryScreen';
 import { DevScreen } from '../screens/DevScreen';
+import { AppAlertProvider } from '../components/AppAlert';
 
 import { useBasketStore } from '../stores/basketStore';
 import { useProductStore } from '../stores/productStore';
@@ -176,6 +177,7 @@ export function AppNavigator() {
           />
         </Root.Navigator>
       </PostHogProvider>
+      <AppAlertProvider />
     </NavigationContainer>
   );
 }
