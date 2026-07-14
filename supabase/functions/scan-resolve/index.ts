@@ -83,7 +83,73 @@ Deno.serve(async (req) => {
   if (existing) {
     product = existing;
   } else {
-    // 2. upcitemdb — try each variant until one returns a result
+    // 2. Open Food Facts — free, no key, 4M+ products, community-curated
+    // specifically for food/grocery items. Tried before upcitemdb because
+    // upcitemdb's broad general-merchandise coverage is noisier for groceries:
+    // UPC/EAN collisions (OFF flags these via a `conflict-with-upc-12` code tag)
+    // can make it return a completely unrelated product for a shared barcode —
+    // e.g. a swimsuit for a barcode OFF correctly resolves as a carton of eggs.
+    // Try each barcode variant until one matches.
+    for (const variant of variants) {
+      try {
+        const offRes = await fetch(
+          `https://world.openfoodfacts.org/api/v2/product/${variant}.json`,
+          { headers: { 'User-Agent': 'GroceryScan/1.0 (masontuft@gmail.com)' } }
+        );
+        if (!offRes.ok) continue;
+        const offJson = await offRes.json() as {
+          status?: number;
+          product?: {
+            product_name?: string;
+            brands?: string;
+            image_url?: string;
+            quantity?: string;
+            categories_tags?: string[];
+          };
+        };
+        if (offJson.status !== 1 || !offJson.product?.product_name) continue;
+
+        const p = offJson.product;
+        const categories = (p.categories_tags ?? [])
+          .map((t: string) => t.replace(/^en:/, ''))
+          .filter((t: string) => !t.includes(':'))
+          .slice(0, 3);
+        // Select-then-insert rather than upsert: the unique index on `upc` is a
+        // partial index (WHERE upc IS NOT NULL), which PostgreSQL cannot use as
+        // an ON CONFLICT arbiter — a plain upsert would always attempt an insert
+        // and fail whenever a row with this upc already exists (see the same
+        // note in manual-submit/index.ts).
+        const { data: existingByUpc } = await db.from('products').select('*').eq('upc', variant).maybeSingle();
+        if (existingByUpc) {
+          product = existingByUpc;
+        } else {
+          const { data: inserted, error: insertErr } = await db
+            .from('products')
+            .insert({
+              name: p.product_name,
+              brand: p.brands?.split(',')[0]?.trim() ?? null,
+              upc: variant,
+              barcode: variant,
+              image_url: p.image_url ?? null,
+              size: p.quantity ?? null,
+              categories,
+              manufacturer_prefix: extractManufacturerPrefix(variant),
+            })
+            .select()
+            .single();
+          if (insertErr) console.error('scan-resolve OFF insert error:', JSON.stringify(insertErr));
+          product = inserted;
+        }
+        break; // found — stop trying variants
+      } catch {
+        // try next variant
+      }
+    }
+
+    // 3. upcitemdb — covers non-food grocery items (household, personal care,
+    // pet, baby, health) that OFF doesn't carry. Always attempted even when OFF
+    // already resolved identity above, since it also mines chain-specific offer
+    // pricing below; only used for identity itself when OFF missed.
     const apiKey = Deno.env.get('BARCODE_LOOKUP_API_KEY');
     for (const variant of variants) {
       try {
@@ -102,34 +168,34 @@ Deno.serve(async (req) => {
         const item = json.items?.[0];
         if (!item) continue;
 
-        // Select-then-insert rather than upsert: the unique index on `upc` is a
-        // partial index (WHERE upc IS NOT NULL), which PostgreSQL cannot use as
-        // an ON CONFLICT arbiter — a plain upsert would always attempt an insert
-        // and fail whenever a row with this upc already exists (see the same
-        // note in manual-submit/index.ts).
-        const { data: existingByUpc } = await db.from('products').select('*').eq('upc', variant).maybeSingle();
-        if (existingByUpc) {
-          product = existingByUpc;
-        } else {
-          const { data: inserted, error: insertErr } = await db
-            .from('products')
-            .insert({
-              name: item.title ?? 'Unknown Product',
-              brand: item.brand ?? null,
-              upc: variant,
-              barcode: variant,
-              image_url: item.images?.[0] ?? null,
-              size: item.size ?? item.weight ?? null,
-              categories: item.category ? [item.category] : [],
-              manufacturer_prefix: extractManufacturerPrefix(variant),
-            })
-            .select()
-            .single();
-          if (insertErr) console.error('scan-resolve upcitemdb insert error:', JSON.stringify(insertErr));
-          product = inserted;
+        if (!product) {
+          // Select-then-insert — see the OFF block above for why a plain upsert
+          // against the partial `upc` unique index isn't safe here.
+          const { data: existingByUpc } = await db.from('products').select('*').eq('upc', variant).maybeSingle();
+          if (existingByUpc) {
+            product = existingByUpc;
+          } else {
+            const { data: inserted, error: insertErr } = await db
+              .from('products')
+              .insert({
+                name: item.title ?? 'Unknown Product',
+                brand: item.brand ?? null,
+                upc: variant,
+                barcode: variant,
+                image_url: item.images?.[0] ?? null,
+                size: item.size ?? item.weight ?? null,
+                categories: item.category ? [item.category] : [],
+                manufacturer_prefix: extractManufacturerPrefix(variant),
+              })
+              .select()
+              .single();
+            if (insertErr) console.error('scan-resolve upcitemdb insert error:', JSON.stringify(insertErr));
+            product = inserted;
+          }
         }
 
-        // Mine UPCitemdb offers for chain-specific fallback pricing.
+        // Mine UPCitemdb offers for chain-specific fallback pricing, regardless
+        // of whether OFF already won identity for this scan.
         for (const offer of item.offers ?? []) {
           const chain = offer.domain ? UPCITEMDB_OFFER_DOMAIN_MAP[offer.domain] : undefined;
           if (!chain || !offer.price) continue;
@@ -149,63 +215,6 @@ Deno.serve(async (req) => {
         break; // found — stop trying variants
       } catch {
         // try next variant
-      }
-    }
-
-    // 3. Open Food Facts fallback — free, no key, 4M+ products.
-    // Try each barcode variant until one matches.
-    if (!product) {
-      for (const variant of variants) {
-        try {
-          const offRes = await fetch(
-            `https://world.openfoodfacts.org/api/v2/product/${variant}.json`,
-            { headers: { 'User-Agent': 'GroceryScan/1.0 (masontuft@gmail.com)' } }
-          );
-          if (!offRes.ok) continue;
-          const offJson = await offRes.json() as {
-            status?: number;
-            product?: {
-              product_name?: string;
-              brands?: string;
-              image_url?: string;
-              quantity?: string;
-              categories_tags?: string[];
-            };
-          };
-          if (offJson.status !== 1 || !offJson.product?.product_name) continue;
-
-          const p = offJson.product;
-          const categories = (p.categories_tags ?? [])
-            .map((t: string) => t.replace(/^en:/, ''))
-            .filter((t: string) => !t.includes(':'))
-            .slice(0, 3);
-          // Select-then-insert — see the upcitemdb block above for why a plain
-          // upsert against the partial `upc` unique index isn't safe here.
-          const { data: existingByUpc } = await db.from('products').select('*').eq('upc', variant).maybeSingle();
-          if (existingByUpc) {
-            product = existingByUpc;
-          } else {
-            const { data: inserted, error: insertErr } = await db
-              .from('products')
-              .insert({
-                name: p.product_name,
-                brand: p.brands?.split(',')[0]?.trim() ?? null,
-                upc: variant,
-                barcode: variant,
-                image_url: p.image_url ?? null,
-                size: p.quantity ?? null,
-                categories,
-                manufacturer_prefix: extractManufacturerPrefix(variant),
-              })
-              .select()
-              .single();
-            if (insertErr) console.error('scan-resolve OFF insert error:', JSON.stringify(insertErr));
-            product = inserted;
-          }
-          break; // found — stop trying variants
-        } catch {
-          // try next variant
-        }
       }
     }
   }
