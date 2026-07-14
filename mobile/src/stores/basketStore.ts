@@ -18,7 +18,7 @@ interface BasketState {
   addItem: (item: BasketItem) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, qty: number) => void;
-  updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'notes'>>) => void;
+  updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
   clearBasket: () => void;
   setStore: (storeId: string | null) => void;
   recalculate: () => Promise<void>;

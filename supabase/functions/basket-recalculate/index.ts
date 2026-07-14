@@ -1,7 +1,7 @@
 import { corsHeaders, corsResponse, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { applyPromotions } from '../_shared/promotionEngine.ts';
-import { lookupGroceryTaxRate } from '../_shared/taxLookup.ts';
+import { lookupGroceryTaxRate, lookupGeneralSalesTaxRate, isCategoryTaxExempt } from '../_shared/taxLookup.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -10,7 +10,14 @@ Deno.serve(async (req) => {
 
   let body: {
     storeId?: string | null;
-    items?: Array<{ productId: string; quantity: number; unitPrice: number; taxable: boolean }>;
+    items?: Array<{
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+      taxable: boolean;
+      taxableOverridden?: boolean;
+      category?: string | null;
+    }>;
     location?: { state?: string | null; zip?: string | null; city?: string | null };
   };
 
@@ -71,24 +78,42 @@ Deno.serve(async (req) => {
       discountByProduct[d.productId] = (discountByProduct[d.productId] ?? 0) + d.discountAmount;
     }
 
-    // 5. Calculate subtotal and discounts
+    // 5. Calculate subtotal, discounts, and tax
     let subtotal = 0;
-    let taxableSubtotal = 0;
     let totalDiscounts = 0;
+    let rawTax = 0;
 
+    // Every state has (at minimum) a general sales tax rate, and separately a
+    // grocery rate that's usually 0% but is a nonzero *reduced* rate in a few
+    // states (MO, NC, TN, UT, AL, MS as of this writing) — so "exempt" items in
+    // those states still owe tax, just less than a carved-out item. Applying a
+    // single blended rate to a "taxable" subtotal (the old approach) either
+    // zeroed out real grocery tax in those states or, in the far more common
+    // 0%-grocery-rate states, silently charged $0 on candy/soda/general
+    // merchandise that should be taxed at the general rate. Per-item rate
+    // selection below fixes both.
+    //
+    // taxable is trusted as-is only when the shopper explicitly confirmed it via
+    // BasketItemRow's manual toggle (taxableOverridden) — otherwise it's recomputed
+    // from category + state here rather than trusting whatever the client last
+    // stored, which can go stale (e.g. item added before location was known) or
+    // drift from this file's exemptCategories data over time.
+    const groceryRate = lookupGroceryTaxRate(location?.state ?? null, location?.city ?? null);
+    const generalRate = lookupGeneralSalesTaxRate(location?.state ?? null, location?.city ?? null);
     for (const item of items) {
       const unitPrice = bestPriceMap[item.productId] ?? item.unitPrice;
       const lineTotal = unitPrice * item.quantity;
       const discount = discountByProduct[item.productId] ?? 0;
       subtotal += lineTotal;
       totalDiscounts += discount;
-      if (item.taxable) taxableSubtotal += lineTotal - discount;
+      const taxable = item.taxableOverridden
+        ? item.taxable
+        : !isCategoryTaxExempt(item.category ?? null, location?.state ?? null);
+      const rate = taxable ? generalRate : groceryRate;
+      rawTax += (lineTotal - discount) * rate;
     }
 
-    // 6. Tax
-    const taxRate = lookupGroceryTaxRate(location?.state ?? null, location?.city ?? null);
-    const tax = Math.round(taxableSubtotal * taxRate * 100) / 100;
-
+    const tax = Math.round(rawTax * 100) / 100;
     const estimatedTotal = Math.max(0, subtotal - totalDiscounts + tax);
 
     return jsonResponse({

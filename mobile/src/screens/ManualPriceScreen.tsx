@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
+import { useLocationStore } from '../stores/locationStore';
 import { AppAlert } from '../components/AppAlert';
 import { submitManualEntry } from '../services/api';
 import { track, trackError } from '../services/analytics';
@@ -49,6 +50,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const selectStore = useStoreStore((s) => s.selectStore);
   const fetchStores = useStoreStore((s) => s.fetchStores);
   const addItem = useBasketStore((s) => s.addItem);
+  const locationState = useLocationStore((s) => s.state);
 
   // Required
   const [productName, setProductName] = useState(initialProductName);
@@ -115,7 +117,8 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         quantity: 1,
         unitPrice: parsedPrice,
         appliedDiscount: 0,
-        taxable: !isTaxExempt(selectedCategory),
+        taxable: !isTaxExempt(selectedCategory, locationState),
+        taxableOverridden: false,
         notes: null,
         imageUrl: imageUrl ?? null,
         category: selectedCategory,

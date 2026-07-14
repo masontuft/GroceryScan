@@ -18,7 +18,7 @@ interface Props {
   item: BasketItem;
   onRemove: (productId: string) => void;
   onQuantityChange: (productId: string, qty: number) => void;
-  onUpdate: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'notes'>>) => void;
+  onUpdate: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
 }
 
 export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Props) {
@@ -27,12 +27,20 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
   const [editPrice, setEditPrice] = useState(String(item.unitPrice));
   const [editCategory, setEditCategory] = useState<string>(item.category ?? 'Other');
   const [editTaxable, setEditTaxable] = useState(item.taxable);
+  // Tracks whether the user actually moved the TAXABLE switch during this edit
+  // session, as opposed to it merely holding item.taxable's initial value.
+  // Without this, saving after an unrelated edit (renaming, recategorizing)
+  // would stamp taxableOverridden:true just because *some* save happened,
+  // permanently freezing a stale taxable value and stopping basket-recalculate
+  // from ever recomputing it from category + state again.
+  const [taxableTouched, setTaxableTouched] = useState(false);
 
   useEffect(() => {
     setEditName(item.name);
     setEditPrice(String(item.unitPrice));
     setEditCategory(item.category ?? 'Other');
     setEditTaxable(item.taxable);
+    setTaxableTouched(false);
   }, [item]);
 
   const lineTotal = item.unitPrice * item.quantity - item.appliedDiscount;
@@ -43,6 +51,11 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
       unitPrice: isPriceEntered(price) ? price : item.unitPrice,
       category: editCategory,
       taxable: editTaxable,
+      // Only mark this an explicit user override if they actually touched the
+      // switch this session — otherwise omit the field so a prior override (or
+      // lack of one) is left as-is rather than getting frozen/cleared by an
+      // unrelated save.
+      ...(taxableTouched ? { taxableOverridden: true } : {}),
     });
     setExpanded(false);
   };
@@ -68,6 +81,7 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
     setEditPrice(String(item.unitPrice));
     setEditCategory(item.category ?? 'Other');
     setEditTaxable(item.taxable);
+    setTaxableTouched(false);
     setExpanded(false);
   };
 
@@ -179,7 +193,10 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
             <Text style={styles.editLabel}>TAXABLE</Text>
             <Switch
               value={editTaxable}
-              onValueChange={setEditTaxable}
+              onValueChange={(v) => {
+                setEditTaxable(v);
+                setTaxableTouched(true);
+              }}
               trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
               thumbColor={editTaxable ? '#2563eb' : '#94a3b8'}
             />
