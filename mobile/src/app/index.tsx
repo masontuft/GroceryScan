@@ -15,7 +15,6 @@ import { SearchScreen } from '../screens/SearchScreen';
 import { StoreSelectScreen } from '../screens/StoreSelectScreen';
 import { LocationScreen } from '../screens/LocationScreen';
 import { ManualPriceScreen } from '../screens/ManualPriceScreen';
-import { WincoQuickEntryScreen } from '../screens/WincoQuickEntryScreen';
 import { QuickEntryScreen } from '../screens/QuickEntryScreen';
 import { DevScreen } from '../screens/DevScreen';
 
@@ -51,9 +50,6 @@ export type RootStackParamList = {
     initialSize?: string;
     initialUnit?: string;
     initialCategories?: string[];    // pre-fill from product lookup / Open Food Facts
-  };
-  WincoEntry: {
-    initialBarcode?: string;    // optional barcode to auto-resolve on mount
   };
 };
 
@@ -172,11 +168,6 @@ export function AppNavigator() {
             name="ManualPrice"
             component={ManualPriceScreen}
             options={{ headerShown: true, presentation: 'modal', title: 'Enter Price' }}
-          />
-          <Root.Screen
-            name="WincoEntry"
-            component={WincoQuickEntryScreen}
-            options={{ headerShown: true, presentation: 'modal', title: 'Winco Quick Entry' }}
           />
           <Root.Screen
             name="Dev"

@@ -14,8 +14,6 @@ const RULES: Array<[RegExp, string]> = [
   [/(health|vitamin|supplement|medicine|pharmacy|first\s+aid|bandage|pain|allergy|cold|flu)/i, 'Health'],
 ];
 
-const TAX_EXEMPT = new Set(['Produce', 'Meat & Seafood', 'Dairy & Eggs', 'Bakery & Bread']);
-
 export const STANDARD_CATEGORIES = [
   'Produce',
   'Meat & Seafood',
@@ -46,7 +44,15 @@ export function normalizeCategory(raw: string | string[] | null | undefined): Gr
   return 'Other';
 }
 
-export function isTaxExempt(category: string | null | undefined): boolean {
-  if (!category) return false;
-  return TAX_EXEMPT.has(category);
+// Category-based exemption used to be state-agnostic (Produce/Meat/Dairy/Bakery
+// always exempt), which is wrong: states like Idaho, Mississippi, Alabama, South
+// Dakota, and Hawaii tax raw groceries at close to the full sales tax rate, while
+// many other states exempt them. Default every item taxable so the per-state
+// groceryTaxRate in taxRates.json (see supabase/functions/_shared/taxLookup.ts)
+// is what actually gates tax at the basket level, rather than being silently
+// zeroed out here first. A real fix needs state+category-aware taxability rules
+// (e.g. many exempt-grocery states still tax candy/soda/prepared food) — that's
+// unbuilt; this function is the intended seam for it.
+export function isTaxExempt(_category: string | null | undefined): boolean {
+  return false;
 }
