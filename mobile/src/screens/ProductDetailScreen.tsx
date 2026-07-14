@@ -8,6 +8,7 @@ import { PromotionBadge } from '../components/PromotionBadge';
 import { NutritionPanel } from '../components/NutritionPanel';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
+import { useLocationStore } from '../stores/locationStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
 import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
 import { isPriceStale } from '../utils/freshness';
@@ -27,6 +28,7 @@ export function ProductDetailScreen({ route }: Props) {
   const computedBest = selectBestPrice(pricing);
   const addItem = useBasketStore((s) => s.addItem);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
+  const locationState = useLocationStore((s) => s.state);
 
   // Locally overrides the displayed price after an inline edit is saved, so the
   // screen reflects the correction immediately without re-fetching scanResult.
@@ -113,7 +115,8 @@ export function ProductDetailScreen({ route }: Props) {
       quantity: 1,
       unitPrice: best.price,
       appliedDiscount: 0,
-      taxable: !isTaxExempt(category),
+      taxable: !isTaxExempt(category, locationState),
+      taxableOverridden: false,
       notes: null,
       imageUrl: product.imageUrl,
       category,

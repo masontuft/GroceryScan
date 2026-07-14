@@ -1,3 +1,5 @@
+import taxRates from '../constants/taxRates.json';
+
 const RULES: Array<[RegExp, string]> = [
   [/(produce|fruit|vegetable|fresh\s+veg|salad|herb|lettuce|spinach|tomato|pepper|onion|garlic)/i, 'Produce'],
   [/(meat|beef|pork|lamb|chicken|turkey|poultry|seafood|fish|shrimp|lobster|crab|deli|sausage|bacon|ham)/i, 'Meat & Seafood'],
@@ -44,15 +46,33 @@ export function normalizeCategory(raw: string | string[] | null | undefined): Gr
   return 'Other';
 }
 
-// Category-based exemption used to be state-agnostic (Produce/Meat/Dairy/Bakery
-// always exempt), which is wrong: states like Idaho, Mississippi, Alabama, South
+interface StateTaxRow {
+  state: string;
+  generalSalesTaxRate: number;
+  exemptCategories: string[];
+}
+
+const TAX_STATES = (taxRates as { states: StateTaxRow[] }).states;
+
+// Category-based exemption is state-specific: Idaho, Mississippi, Alabama, South
 // Dakota, and Hawaii tax raw groceries at close to the full sales tax rate, while
-// many other states exempt them. Default every item taxable so the per-state
-// groceryTaxRate in taxRates.json (see supabase/functions/_shared/taxLookup.ts)
-// is what actually gates tax at the basket level, rather than being silently
-// zeroed out here first. A real fix needs state+category-aware taxability rules
-// (e.g. many exempt-grocery states still tax candy/soda/prepared food) — that's
-// unbuilt; this function is the intended seam for it.
-export function isTaxExempt(_category: string | null | undefined): boolean {
-  return false;
+// most other states exempt raw groceries (Produce/Meat & Seafood/Dairy & Eggs/
+// Bakery & Bread/Frozen/Pantry) but still tax candy, soda, and prepared/hot food
+// at the general rate. STANDARD_CATEGORIES has no separate "candy" or "soda"
+// bucket — those live inside Snacks/Beverages alongside chips, water, coffee,
+// and juice — so per-state Snacks/Beverages exemption here is a category-level
+// proxy for those carve-outs (majority item in each bucket wins), not an exact
+// item-level rule, and hot/prepared deli food has no dedicated category at all.
+// See taxRates.json's `exemptCategories` per state for the underlying data and
+// citations backing each state's grouping; kept in sync with the server-side
+// mirror in supabase/functions/_shared/taxLookup.ts.
+export function isTaxExempt(
+  category: string | null | undefined,
+  state: string | null | undefined
+): boolean {
+  if (!category || !state) return false;
+  const row = TAX_STATES.find((s) => s.state === state.toUpperCase().trim());
+  if (!row) return false;
+  if (row.generalSalesTaxRate === 0) return true; // no state sales tax at all
+  return row.exemptCategories.includes(category);
 }

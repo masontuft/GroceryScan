@@ -18,7 +18,7 @@ interface Props {
   item: BasketItem;
   onRemove: (productId: string) => void;
   onQuantityChange: (productId: string, qty: number) => void;
-  onUpdate: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'notes'>>) => void;
+  onUpdate: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
 }
 
 export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Props) {
@@ -43,6 +43,10 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
       unitPrice: isPriceEntered(price) ? price : item.unitPrice,
       category: editCategory,
       taxable: editTaxable,
+      // Saving from this panel is the explicit "I reviewed this" action, so it
+      // always marks taxable as a user override — basket-recalculate stops
+      // recomputing it from category + state once this is set.
+      taxableOverridden: true,
     });
     setExpanded(false);
   };

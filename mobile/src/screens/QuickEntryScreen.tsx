@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
+import { useLocationStore } from '../stores/locationStore';
 import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES } from '../utils/normalizeCategory';
 import { track } from '../services/analytics';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -38,6 +39,7 @@ export function QuickEntryScreen() {
   const addItem = useBasketStore((s) => s.addItem);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const stores = useStoreStore((s) => s.stores);
+  const locationState = useLocationStore((s) => s.state);
 
   const storeName = stores.find((s) => s.id === selectedStoreId)?.name;
 
@@ -59,7 +61,8 @@ export function QuickEntryScreen() {
       quantity: 1,
       unitPrice: parsedPrice,
       appliedDiscount: 0,
-      taxable: !isTaxExempt(category),
+      taxable: !isTaxExempt(category, locationState),
+      taxableOverridden: false,
       notes: null,
       imageUrl: null,
       category,
