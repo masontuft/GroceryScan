@@ -54,9 +54,13 @@ export function AppAlertProvider() {
   }, []);
 
   const handleDismiss = () => {
-    const cancelButton = state.buttons.find((b) => b.style === 'cancel');
-    if (cancelButton?.onPress) {
-      cancelButton.onPress();
+    // A single-button alert has only one possible outcome, so backdrop-tap
+    // confirms it regardless of style. With multiple buttons, backdrop-tap
+    // only takes an action if one of them is explicitly the cancel option.
+    if (state.buttons.length === 1) {
+      state.buttons[0].onPress?.();
+    } else {
+      state.buttons.find((b) => b.style === 'cancel')?.onPress?.();
     }
     setState(initialState);
   };
