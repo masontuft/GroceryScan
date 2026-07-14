@@ -1,6 +1,11 @@
 // Kept in sync manually with mobile/src/constants/taxRates.json (mobile's copy is used for
 // the client-side useLocalTotal estimate). Edge functions can't import outside their deploy
 // boundary, so this is a local copy rather than a shared reference.
+//
+// Note on `effectiveDate` in taxRates.json: it's a "last verified as of" stamp,
+// not necessarily the legal date the underlying law took effect — most rows
+// predate this comment and share one bulk-verification date. Don't read it as
+// an authoritative effective date for any single state's law.
 import taxRates from './taxRates.json' with { type: 'json' };
 
 interface TaxRate {
