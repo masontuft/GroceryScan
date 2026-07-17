@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Switch, StyleSheet, FlatList } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
 import { NutritionPanel } from '../components/NutritionPanel';
@@ -10,6 +10,7 @@ import { AppAlert } from '../components/AppAlert';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
+import { useProductStore } from '../stores/productStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
 import { normalizeCategory, isTaxExempt, isLikelyByWeight } from '../utils/normalizeCategory';
 import { isPriceStale } from '../utils/freshness';
@@ -25,12 +26,21 @@ type Props = {
 };
 
 export function ProductDetailScreen({ route }: Props) {
-  const { scanResult } = route.params;
-  const { product, pricing, promotions } = scanResult;
+  const { scanResult, barcode } = route.params;
+  const { product } = scanResult;
+  // Stateful (not destructured straight from scanResult) so a refetch on
+  // refocus — e.g. returning from ManualPrice after submitting a price —
+  // can actually update what's shown. scanResult is a route param captured
+  // at the moment this screen was first opened, so without this the price
+  // stayed frozen on "no price" even after a manual entry just saved one.
+  const [pricing, setPricing] = useState(scanResult.pricing);
+  const [promotions, setPromotions] = useState(scanResult.promotions);
   const computedBest = selectBestPrice(pricing);
   const addItem = useBasketStore((s) => s.addItem);
+  const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const locationState = useLocationStore((s) => s.state);
+  const locationZip = useLocationStore((s) => s.zip);
   const category = normalizeCategory(product.categories);
 
   // Locally overrides the displayed price after an inline edit is saved, so the
@@ -48,6 +58,33 @@ export function ProductDetailScreen({ route }: Props) {
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
+
+  // Skip the refetch on the very first focus — the screen was just navigated
+  // to with fresh data, so re-fetching immediately would be redundant.
+  const hasFocusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
+      // forceRefresh: true — without it this would just return the cached
+      // result (product/pricing TTLs are hours long), silently defeating the
+      // whole point of refetching after e.g. a manual price submission.
+      resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip }, true)
+        .then((result) => {
+          setPricing(result.pricing);
+          setPromotions(result.promotions);
+          // A fresh server price supersedes whatever the inline-edit override
+          // was tracking, and stops it from masking price changes made
+          // elsewhere (e.g. a store-side update) with stale local data.
+          setPriceOverride(null);
+        })
+        .catch((err) => {
+          trackError('ProductDetailScreen:refetchOnFocus', err, { productId: product.id, barcode });
+        });
+    }, [barcode, selectedStoreId, locationState, locationZip, product.id, resolveProduct])
+  );
 
   useEffect(() => {
     track('product_viewed', {
@@ -168,6 +205,8 @@ export function ProductDetailScreen({ route }: Props) {
                 initialSize: product.size ?? undefined,
                 initialUnit: product.unit ?? undefined,
                 initialCategories: product.categories?.length ? product.categories : undefined,
+                initialByWeight: byWeight,
+                initialWeightUnit: weightUnit,
               })
             }
             activeOpacity={0.8}
@@ -175,40 +214,44 @@ export function ProductDetailScreen({ route }: Props) {
             <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
           </TouchableOpacity>
         )}
-        <View style={styles.byWeightRow}>
-          <Text style={styles.byWeightLabel}>PRICED BY WEIGHT</Text>
-          <Switch
-            value={byWeight}
-            onValueChange={setByWeight}
-            trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
-            thumbColor={byWeight ? '#2563eb' : '#94a3b8'}
-          />
-        </View>
-        {byWeight && (
-          <View style={styles.weightRow}>
-            <TextInput
-              style={styles.weightInput}
-              value={weightText}
-              onChangeText={setWeightText}
-              keyboardType="decimal-pad"
-              placeholder="1.00"
-              placeholderTextColor="#94a3b8"
-              selectTextOnFocus
-            />
-            {(['lb', 'kg'] as const).map((u) => (
-              <TouchableOpacity
-                key={u}
-                style={[styles.chip, weightUnit === u && styles.chipSelected]}
-                onPress={() => setWeightUnit(u)}
-                hitSlop={{ top: 9, bottom: 9 }}
-                accessibilityLabel={u}
-                accessibilityRole="button"
-                accessibilityState={{ selected: weightUnit === u }}
-              >
-                <Text style={[styles.chipText, weightUnit === u && styles.chipTextSelected]}>{u}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+        {best.price !== null && (
+          <>
+            <View style={styles.byWeightRow}>
+              <Text style={styles.byWeightLabel}>PRICED BY WEIGHT</Text>
+              <Switch
+                value={byWeight}
+                onValueChange={setByWeight}
+                trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
+                thumbColor={byWeight ? '#2563eb' : '#94a3b8'}
+              />
+            </View>
+            {byWeight && (
+              <View style={styles.weightRow}>
+                <TextInput
+                  style={styles.weightInput}
+                  value={weightText}
+                  onChangeText={setWeightText}
+                  keyboardType="decimal-pad"
+                  placeholder="1.00"
+                  placeholderTextColor="#94a3b8"
+                  selectTextOnFocus
+                />
+                {(['lb', 'kg'] as const).map((u) => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.chip, weightUnit === u && styles.chipSelected]}
+                    onPress={() => setWeightUnit(u)}
+                    hitSlop={{ top: 9, bottom: 9 }}
+                    accessibilityLabel={u}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: weightUnit === u }}
+                  >
+                    <Text style={[styles.chipText, weightUnit === u && styles.chipTextSelected]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
         )}
       </View>
       {promotions.length > 0 && (
