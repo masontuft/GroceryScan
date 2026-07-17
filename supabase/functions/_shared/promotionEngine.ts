@@ -15,6 +15,10 @@ export interface LineItem {
   productId: string;
   quantity: number;
   unitPrice: number;
+  // Absent/'each' means a whole-unit count; 'lb'/'kg' means quantity is a
+  // fractional weight, which BOGO's "every other unit is free" math doesn't
+  // mean anything for.
+  unit?: 'each' | 'lb' | 'kg';
 }
 
 export interface DiscountResult {
@@ -79,7 +83,7 @@ export function applyPromotions(items: LineItem[], promotions: PromotionRow[]): 
         appliedItemPromo = true;
       }
 
-      if (promo.type === 'bogo' && item.quantity >= 2) {
+      if (promo.type === 'bogo' && (item.unit ?? 'each') === 'each' && item.quantity >= 2) {
         const freeItems = Math.floor(item.quantity / 2);
         results.push({
           productId: item.productId,
