@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraView as CameraViewType } from 'expo-camera';
@@ -51,11 +51,19 @@ export function ScanScreen({ navigation }: Props) {
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
+  const stores = useStoreStore((s) => s.stores);
+  const fetchStores = useStoreStore((s) => s.fetchStores);
   const locationState = useLocationStore((s) => s.state);
   const locationZip = useLocationStore((s) => s.zip);
   const { isConnected } = useNetworkStatus();
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (stores.length === 0) fetchStores();
+  }, []);
+
+  const storeName = stores.find((s) => s.id === selectedStoreId)?.name ?? 'No Store';
 
   useFocusEffect(useCallback(() => {
     lastScanned.current = null;
@@ -283,11 +291,6 @@ export function ScanScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {!isConnected && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
-        </View>
-      )}
       {isFocused && (
         <CameraView
           ref={cameraRef}
@@ -303,6 +306,22 @@ export function ScanScreen({ navigation }: Props) {
           </View>
         </CameraView>
       )}
+      <View style={styles.topOverlay} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.storeBanner}
+          onPress={() => rootNav.navigate('StoreSelect')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.storeBannerIcon}>🏪</Text>
+          <Text style={styles.storeBannerText}>{storeName}</Text>
+          <Text style={styles.storeBannerChange}>Change</Text>
+        </TouchableOpacity>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
+          </View>
+        )}
+      </View>
       {(loading || ocrLoading) && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
@@ -352,4 +371,32 @@ const styles = StyleSheet.create({
   searchBtnText: { color: '#fff', fontWeight: '700' },
   offlineBanner: { backgroundColor: '#f59e0b', padding: 8, alignItems: 'center' },
   offlineText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  topOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: 12,
+    gap: 8,
+  },
+  storeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 12,
+    padding: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  storeBannerIcon: { fontSize: 16 },
+  storeBannerText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1e293b' },
+  storeBannerChange: { fontSize: 12, fontWeight: '700', color: '#2563eb' },
 });
