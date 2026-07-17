@@ -11,7 +11,6 @@ import { AppAlert } from '../components/AppAlert';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
 import { ocrPriceTag } from '../services/api';
-import { selectBestPrice } from '../pricing/selectBestPrice';
 import { track, trackError } from '../services/analytics';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
@@ -90,25 +89,14 @@ export function ScanScreen({ navigation }: Props) {
     return true;
   };
 
-  // Sends a resolved product straight to the price-entry screen it needs —
-  // ProductDetail if a price already exists (any provider, or a prior manual
-  // entry), ManualPrice otherwise. Price-driven rather than chain-based, so
-  // it applies uniformly to any store/scan that comes back without a price.
+  // Always sends a resolved product to ProductDetail, priced or not — that
+  // screen already shows nutrition, brand info, and (when best.price is
+  // null) its own "Enter price manually" button routing into ManualPrice.
+  // Skipping straight to ManualPrice on a priceless scan used to hide all of
+  // that behind a bare price-entry form even though the product itself had
+  // already resolved successfully.
   const routeToPriceScreen = (result: Awaited<ReturnType<typeof resolveProduct>>, barcode: string) => {
-    const hasPrice = selectBestPrice(result.pricing).price !== null;
-    if (hasPrice) {
-      navigation.navigate('ProductDetail', { scanResult: result, barcode });
-    } else {
-      rootNav.navigate('ManualPrice', {
-        productId: result.product.id,
-        productName: result.product.name,
-        imageUrl: result.product.imageUrl,
-        initialBrand: result.product.brand ?? undefined,
-        initialSize: result.product.size ?? undefined,
-        initialUnit: result.product.unit ?? undefined,
-        initialCategories: result.product.categories?.length ? result.product.categories : undefined,
-      });
-    }
+    navigation.navigate('ProductDetail', { scanResult: result, barcode });
   };
 
   const handleBarcode = async (barcode: string) => {
