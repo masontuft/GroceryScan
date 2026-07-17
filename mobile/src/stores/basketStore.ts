@@ -37,9 +37,17 @@ export const useBasketStore = create<BasketState>()(
           const existing = state.items.find((i) => i.productId === item.productId);
           if (existing) {
             return {
-              items: state.items.map((i) =>
-                i.productId === item.productId ? { ...i, quantity: i.quantity + item.quantity } : i
-              ),
+              items: state.items.map((i) => {
+                if (i.productId !== item.productId) return i;
+                // Summing quantities across different units (e.g. an
+                // existing "1 each" line and a new "2.4 lb" add of the same
+                // product) is meaningless — the newly-added values replace
+                // the line instead of merging into it. Same-unit adds merge
+                // as before.
+                return i.unit === item.unit
+                  ? { ...i, quantity: i.quantity + item.quantity }
+                  : { ...i, ...item };
+              }),
             };
           }
           return { items: [...state.items, item] };
@@ -134,6 +142,20 @@ export const useBasketStore = create<BasketState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ items: s.items }),
       skipHydration: true,
+      // v1 added BasketItem.unit as a required field. Baskets persisted
+      // before that (version defaults to 0 when unset) have items with no
+      // `unit` at all — without backfilling, BasketItemRow's `item.unit ===
+      // 'each'` check is false for them, silently swapping the qty stepper
+      // for the weight-edit UI and showing "$X.XX/undefined" instead of
+      // "$X.XX each".
+      version: 1,
+      migrate: (persistedState, version) => {
+        const state = persistedState as { items?: Array<Record<string, unknown>> };
+        if (version < 1 && state.items) {
+          state.items = state.items.map((item) => ({ unit: 'each', ...item }));
+        }
+        return state as unknown as { items: BasketItem[] };
+      },
     }
   )
 );
