@@ -36,12 +36,15 @@ export const STANDARD_CATEGORIES = [
 export type GroceryCategory = (typeof STANDARD_CATEGORIES)[number];
 
 export function normalizeCategory(raw: string | string[] | null | undefined): GroceryCategory {
-  const inputs = Array.isArray(raw) ? raw : [raw];
-  for (const input of inputs) {
-    if (!input) continue;
-    for (const [pattern, label] of RULES) {
-      if (pattern.test(input)) return label as GroceryCategory;
-    }
+  const inputs = (Array.isArray(raw) ? raw : [raw]).filter((input): input is string => Boolean(input));
+  // Checked rule-by-rule across every input, not input-by-input across every
+  // rule — otherwise a generic first tag that happens to match a low-priority
+  // rule (e.g. OFF's "plant-based-foods-and-beverages" root tag containing
+  // "beverages") would win before a more specific later tag (e.g.
+  // "fresh-tomatoes") ever gets checked against the higher-priority Produce
+  // rule. RULES' declared order is the priority order across ALL inputs.
+  for (const [pattern, label] of RULES) {
+    if (inputs.some((input) => pattern.test(input))) return label as GroceryCategory;
   }
   return 'Other';
 }

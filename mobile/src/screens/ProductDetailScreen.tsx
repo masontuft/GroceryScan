@@ -31,7 +31,7 @@ export function ProductDetailScreen({ route }: Props) {
   const addItem = useBasketStore((s) => s.addItem);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const locationState = useLocationStore((s) => s.state);
-  const category = normalizeCategory(product.categories[0]);
+  const category = normalizeCategory(product.categories);
 
   // Locally overrides the displayed price after an inline edit is saved, so the
   // screen reflects the correction immediately without re-fetching scanResult.
