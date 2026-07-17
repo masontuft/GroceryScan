@@ -90,6 +90,9 @@ export function AppAlertProvider() {
     <Modal
       visible={state.visible}
       transparent
+      // keep in sync with MODAL_FADE_MS above — that constant assumes this
+      // duration, and the native-modal race it exists to avoid comes back
+      // silently if this changes without updating it too.
       animationType="fade"
       onRequestClose={handleDismiss}
     >
