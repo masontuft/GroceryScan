@@ -44,6 +44,8 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     initialSize,
     initialUnit,
     initialCategories,
+    initialByWeight,
+    initialWeightUnit,
   } = route.params;
 
   const stores = useStoreStore((s) => s.stores);
@@ -69,8 +71,11 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<GroceryCategory>(
     normalizeCategory(initialCategories && initialCategories.length > 0 ? initialCategories : null)
   );
-  const [byWeight, setByWeight] = useState(isLikelyByWeight(selectedCategory));
-  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  // Prefer whatever ProductDetail already had the toggle set to — falling
+  // back to the category heuristic only when this screen is reached without
+  // that context (e.g. straight from a "not found" barcode scan).
+  const [byWeight, setByWeight] = useState(initialByWeight ?? isLikelyByWeight(selectedCategory));
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>(initialWeightUnit ?? 'lb');
   const [weightText, setWeightText] = useState('1.00');
 
   useEffect(() => {
@@ -131,9 +136,14 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         category: selectedCategory,
       });
 
-      AppAlert.alert('Added', `${productName.trim()} added to basket.`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      // Navigate directly rather than gating this on an AppAlert dismissal —
+      // this screen is itself a native `presentation: 'modal'` stack screen,
+      // and stacking AppAlert's own Modal on top of it just to defer the same
+      // goBack() the alert's only button would trigger is the pattern that
+      // caused the freeze this fixed (two competing native modal transitions
+      // on the same screen). LocationScreen/StoreSelectScreen call goBack()
+      // directly for the same "save and return" case — matches that.
+      navigation.goBack();
     } catch (err) {
       trackError('ManualPriceScreen:handleAdd', err, { productId, storeId: isOther ? null : pickedStoreId });
       const message = err instanceof Error ? err.message : String(err);
