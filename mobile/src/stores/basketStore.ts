@@ -4,11 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recalculateBasket, EdgeFunctionError } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import { useLocationStore } from './locationStore';
+import { useStoreStore } from './storeStore';
 import type { BasketItem, BasketTotal } from '../types/basket';
 
 interface BasketState {
   items: BasketItem[];
-  storeId: string | null;
   lastTotal: BasketTotal | null;
   loading: boolean;
   // Set when the last recalculate() call failed — lastTotal is stale when true,
@@ -21,7 +21,6 @@ interface BasketState {
   updateWeight: (productId: string, weight: number, unit: 'lb' | 'kg') => void;
   updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
   clearBasket: () => void;
-  setStore: (storeId: string | null) => void;
   recalculate: () => Promise<void>;
 }
 
@@ -29,7 +28,6 @@ export const useBasketStore = create<BasketState>()(
   persist(
     (set, get) => ({
       items: [],
-      storeId: null,
       lastTotal: null,
       loading: false,
       recalcError: false,
@@ -50,7 +48,7 @@ export const useBasketStore = create<BasketState>()(
           productId: item.productId,
           category: item.category,
           unitPrice: item.unitPrice,
-          storeId: get().storeId,
+          storeId: useStoreStore.getState().selectedStoreId,
         });
         get().recalculate();
       },
@@ -98,23 +96,25 @@ export const useBasketStore = create<BasketState>()(
         set({ items: [], lastTotal: null });
       },
 
-      setStore: (storeId) => set({ storeId }),
-
       recalculate: async () => {
-        const { items, storeId } = get();
+        const { items } = get();
         if (items.length === 0) {
           set({ lastTotal: { subtotal: 0, discounts: 0, tax: 0, estimatedTotal: 0 } });
           return;
         }
         set({ loading: true, recalcError: false });
         try {
-          // Read directly from locationStore rather than keeping a local copy —
-          // a separate `location` field here previously went stale forever
-          // (nothing ever wrote to it), silently sending state:null on every
-          // recalculation and making the backend return $0 tax regardless of
-          // the user's actual location.
+          // Read directly from locationStore/storeStore rather than keeping a
+          // local copy — a separate `location` field here previously went
+          // stale forever (nothing ever wrote to it), silently sending
+          // state:null on every recalculation and making the backend return
+          // $0 tax regardless of the user's actual location. `storeId` had
+          // the exact same bug: a `setStore` action existed but nothing ever
+          // called it, so every recalculate() sent storeId:null and the
+          // backend silently skipped all store-specific pricing/promotions.
           const { state, zip } = useLocationStore.getState();
-          const total = await recalculateBasket(storeId, items, { state, zip });
+          const { selectedStoreId } = useStoreStore.getState();
+          const total = await recalculateBasket(selectedStoreId, items, { state, zip });
           set({ lastTotal: total, loading: false, recalcError: false });
         } catch (err) {
           // Keep last known total in state (some screens may still read it), but
@@ -122,7 +122,7 @@ export const useBasketStore = create<BasketState>()(
           // estimate and offer a retry instead of showing a silently wrong total.
           trackError('basketStore:recalculate', err, {
             itemCount: items.length,
-            storeId,
+            storeId: useStoreStore.getState().selectedStoreId,
             ...(err instanceof EdgeFunctionError ? { endpoint: err.endpoint, status: err.status } : {}),
           });
           set({ loading: false, recalcError: true });
@@ -132,7 +132,7 @@ export const useBasketStore = create<BasketState>()(
     {
       name: 'basket-store',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ items: s.items, storeId: s.storeId }),
+      partialize: (s) => ({ items: s.items }),
       skipHydration: true,
     }
   )
