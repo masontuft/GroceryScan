@@ -51,6 +51,8 @@ export type RootStackParamList = {
     initialSize?: string;
     initialUnit?: string;
     initialCategories?: string[];    // pre-fill from product lookup / Open Food Facts
+    initialByWeight?: boolean;       // carry over the "priced by weight" toggle from ProductDetail
+    initialWeightUnit?: 'lb' | 'kg';
   };
 };
 
