@@ -66,6 +66,13 @@ const TAX_STATES = (taxRates as { states: StateTaxRow[] }).states;
 // See taxRates.json's `exemptCategories` per state for the underlying data and
 // citations backing each state's grouping; kept in sync with the server-side
 // mirror in supabase/functions/_shared/taxLookup.ts.
+// Heuristic default for whether a product is likely sold by weight rather
+// than as a fixed-price each — barcode-sourced product data doesn't reliably
+// carry this, so it's just a starting point the shopper can override.
+export function isLikelyByWeight(category: GroceryCategory): boolean {
+  return category === 'Produce';
+}
+
 export function isTaxExempt(
   category: string | null | undefined,
   state: string | null | undefined

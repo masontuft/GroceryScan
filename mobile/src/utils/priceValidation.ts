@@ -22,3 +22,13 @@ export function isPriceOverCap(price: number): boolean {
 export function isPriceEntered(price: number): boolean {
   return !isNaN(price) && price > 0;
 }
+
+// Weights are constrained to hundredths (0.01 lb/kg), matching typical store
+// scale precision.
+export function roundWeight(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export function isWeightEntered(weight: number): boolean {
+  return !isNaN(weight) && weight > 0;
+}

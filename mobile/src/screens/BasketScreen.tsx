@@ -59,6 +59,7 @@ export function BasketScreen() {
   const clearBasket = useBasketStore((s) => s.clearBasket);
   const removeItem = useBasketStore((s) => s.removeItem);
   const updateQuantity = useBasketStore((s) => s.updateQuantity);
+  const updateWeight = useBasketStore((s) => s.updateWeight);
   const updateItem = useBasketStore((s) => s.updateItem);
   const recalculate = useBasketStore((s) => s.recalculate);
   const locationState = useLocationStore((s) => s.state);
@@ -150,6 +151,7 @@ export function BasketScreen() {
             item={item}
             onRemove={removeItem}
             onQuantityChange={updateQuantity}
+            onWeightChange={updateWeight}
             onUpdate={updateItem}
           />
         )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Switch, StyleSheet, FlatList } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
@@ -11,8 +11,9 @@ import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
-import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
+import { normalizeCategory, isTaxExempt, isLikelyByWeight } from '../utils/normalizeCategory';
 import { isPriceStale } from '../utils/freshness';
+import { roundWeight, isWeightEntered } from '../utils/priceValidation';
 import { supabase, submitManualEntry } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import type { Product } from '../types/product';
@@ -30,10 +31,14 @@ export function ProductDetailScreen({ route }: Props) {
   const addItem = useBasketStore((s) => s.addItem);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const locationState = useLocationStore((s) => s.state);
+  const category = normalizeCategory(product.categories[0]);
 
   // Locally overrides the displayed price after an inline edit is saved, so the
   // screen reflects the correction immediately without re-fetching scanResult.
   const [priceOverride, setPriceOverride] = useState<number | null>(null);
+  const [byWeight, setByWeight] = useState(isLikelyByWeight(category));
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  const [weightText, setWeightText] = useState('1.00');
   const best = priceOverride !== null
     ? { ...computedBest, price: priceOverride, isOnSale: false, freshnessLabel: 'live' as const }
     : computedBest;
@@ -109,11 +114,16 @@ export function ProductDetailScreen({ route }: Props) {
       AppAlert.alert('No price available', 'Cannot add item without a known price.');
       return;
     }
-    const category = normalizeCategory(product.categories[0]);
+    const weight = roundWeight(parseFloat(weightText.replace(/[^0-9.]/g, '')));
+    if (byWeight && !isWeightEntered(weight)) {
+      AppAlert.alert('Enter a weight', 'Enter the item’s weight before adding it to the basket.');
+      return;
+    }
     addItem({
       productId: product.id,
       name: product.name,
-      quantity: 1,
+      quantity: byWeight ? weight : 1,
+      unit: byWeight ? weightUnit : 'each',
       unitPrice: best.price,
       appliedDiscount: 0,
       taxable: !isTaxExempt(category, locationState),
@@ -164,6 +174,41 @@ export function ProductDetailScreen({ route }: Props) {
           >
             <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
           </TouchableOpacity>
+        )}
+        <View style={styles.byWeightRow}>
+          <Text style={styles.byWeightLabel}>PRICED BY WEIGHT</Text>
+          <Switch
+            value={byWeight}
+            onValueChange={setByWeight}
+            trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
+            thumbColor={byWeight ? '#2563eb' : '#94a3b8'}
+          />
+        </View>
+        {byWeight && (
+          <View style={styles.weightRow}>
+            <TextInput
+              style={styles.weightInput}
+              value={weightText}
+              onChangeText={setWeightText}
+              keyboardType="decimal-pad"
+              placeholder="1.00"
+              placeholderTextColor="#94a3b8"
+              selectTextOnFocus
+            />
+            {(['lb', 'kg'] as const).map((u) => (
+              <TouchableOpacity
+                key={u}
+                style={[styles.chip, weightUnit === u && styles.chipSelected]}
+                onPress={() => setWeightUnit(u)}
+                hitSlop={{ top: 9, bottom: 9 }}
+                accessibilityLabel={u}
+                accessibilityRole="button"
+                accessibilityState={{ selected: weightUnit === u }}
+              >
+                <Text style={[styles.chipText, weightUnit === u && styles.chipTextSelected]}>{u}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
       </View>
       {promotions.length > 0 && (
@@ -231,6 +276,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   manualPriceBtnText: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  byWeightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  byWeightLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  weightInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    height: 44,
+    paddingHorizontal: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    backgroundColor: '#fff',
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  chipSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  chipText: { fontSize: 12, fontWeight: '500', color: '#475569' },
+  chipTextSelected: { color: '#2563eb', fontWeight: '700' },
   brandScroll: { gap: 10, paddingVertical: 4 },
   brandCard: { width: 100, gap: 6 },
   brandCardImage: { width: 100, height: 80, borderRadius: 8, backgroundColor: '#f1f5f9' },

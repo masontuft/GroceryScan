@@ -2,6 +2,7 @@ export interface BasketItem {
   productId: string;
   name: string;
   quantity: number;
+  unit: 'each' | 'lb' | 'kg';
   unitPrice: number;
   appliedDiscount: number;
   taxable: boolean;

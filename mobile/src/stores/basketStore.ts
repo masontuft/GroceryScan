@@ -18,6 +18,7 @@ interface BasketState {
   addItem: (item: BasketItem) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, qty: number) => void;
+  updateWeight: (productId: string, weight: number, unit: 'lb' | 'kg') => void;
   updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
   clearBasket: () => void;
   setStore: (storeId: string | null) => void;
@@ -39,7 +40,7 @@ export const useBasketStore = create<BasketState>()(
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.productId === item.productId ? { ...i, quantity: i.quantity + 1 } : i
+                i.productId === item.productId ? { ...i, quantity: i.quantity + item.quantity } : i
               ),
             };
           }
@@ -66,6 +67,19 @@ export const useBasketStore = create<BasketState>()(
         }
         set((state) => ({
           items: state.items.map((i) => (i.productId === productId ? { ...i, quantity: qty } : i)),
+        }));
+        get().recalculate();
+      },
+
+      updateWeight: (productId, weight, unit) => {
+        if (weight <= 0) {
+          get().removeItem(productId);
+          return;
+        }
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.productId === productId ? { ...i, quantity: weight, unit } : i
+          ),
         }));
         get().recalculate();
       },

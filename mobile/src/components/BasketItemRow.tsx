@@ -11,22 +11,24 @@ import {
 import { AppAlert } from './AppAlert';
 import { formatCurrency } from '../utils/formatCurrency';
 import { STANDARD_CATEGORIES } from '../utils/normalizeCategory';
-import { parsePriceInput, isPriceOverCap, isPriceEntered } from '../utils/priceValidation';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, roundWeight, isWeightEntered } from '../utils/priceValidation';
 import type { BasketItem } from '../types/basket';
 
 interface Props {
   item: BasketItem;
   onRemove: (productId: string) => void;
   onQuantityChange: (productId: string, qty: number) => void;
+  onWeightChange: (productId: string, weight: number, unit: 'lb' | 'kg') => void;
   onUpdate: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
 }
 
-export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Props) {
+export function BasketItemRow({ item, onRemove, onQuantityChange, onWeightChange, onUpdate }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(item.name);
   const [editPrice, setEditPrice] = useState(String(item.unitPrice));
   const [editCategory, setEditCategory] = useState<string>(item.category ?? 'Other');
   const [editTaxable, setEditTaxable] = useState(item.taxable);
+  const [weightText, setWeightText] = useState(String(item.quantity));
   // Tracks whether the user actually moved the TAXABLE switch during this edit
   // session, as opposed to it merely holding item.taxable's initial value.
   // Without this, saving after an unrelated edit (renaming, recategorizing)
@@ -41,9 +43,19 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
     setEditCategory(item.category ?? 'Other');
     setEditTaxable(item.taxable);
     setTaxableTouched(false);
+    setWeightText(String(item.quantity));
   }, [item]);
 
   const lineTotal = item.unitPrice * item.quantity - item.appliedDiscount;
+
+  const commitWeight = () => {
+    const weight = roundWeight(parseFloat(weightText.replace(/[^0-9.]/g, '')));
+    if (!isWeightEntered(weight)) {
+      setWeightText(String(item.quantity));
+      return;
+    }
+    onWeightChange(item.productId, weight, item.unit as 'lb' | 'kg');
+  };
 
   const commitSave = (price: number) => {
     onUpdate(item.productId, {
@@ -102,30 +114,50 @@ export function BasketItemRow({ item, onRemove, onQuantityChange, onUpdate }: Pr
             {item.category && (
               <Text style={styles.categoryChip}>{item.category}</Text>
             )}
-            <Text style={styles.unitPrice}>{formatCurrency(item.unitPrice)} each</Text>
+            <Text style={styles.unitPrice}>
+              {item.unit === 'each' ? `${formatCurrency(item.unitPrice)} each` : `${formatCurrency(item.unitPrice)}/${item.unit}`}
+            </Text>
           </View>
           {item.appliedDiscount > 0 && (
             <Text style={styles.discount}>−{formatCurrency(item.appliedDiscount)} discount</Text>
           )}
         </View>
         <View style={styles.controls}>
-          <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => onQuantityChange(item.productId, item.quantity - 1)}
-            accessibilityLabel={`Decrease quantity of ${item.name}`}
-            accessibilityRole="button"
-          >
-            <Text style={styles.qtyBtnText}>−</Text>
-          </TouchableOpacity>
-          <Text style={styles.qty} accessibilityLabel={`Quantity: ${item.quantity}`}>{item.quantity}</Text>
-          <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => onQuantityChange(item.productId, item.quantity + 1)}
-            accessibilityLabel={`Increase quantity of ${item.name}`}
-            accessibilityRole="button"
-          >
-            <Text style={styles.qtyBtnText}>+</Text>
-          </TouchableOpacity>
+          {item.unit === 'each' ? (
+            <>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                onPress={() => onQuantityChange(item.productId, item.quantity - 1)}
+                accessibilityLabel={`Decrease quantity of ${item.name}`}
+                accessibilityRole="button"
+              >
+                <Text style={styles.qtyBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.qty} accessibilityLabel={`Quantity: ${item.quantity}`}>{item.quantity}</Text>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                onPress={() => onQuantityChange(item.productId, item.quantity + 1)}
+                accessibilityLabel={`Increase quantity of ${item.name}`}
+                accessibilityRole="button"
+              >
+                <Text style={styles.qtyBtnText}>+</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.weightEditRow}>
+              <TextInput
+                style={styles.weightEditInput}
+                value={weightText}
+                onChangeText={setWeightText}
+                onBlur={commitWeight}
+                onSubmitEditing={commitWeight}
+                keyboardType="decimal-pad"
+                selectTextOnFocus
+                accessibilityLabel={`Weight of ${item.name}`}
+              />
+              <Text style={styles.weightUnitLabel}>{item.unit}</Text>
+            </View>
+          )}
         </View>
         <View style={styles.right}>
           <Text style={styles.total}>{formatCurrency(lineTotal)}</Text>
@@ -259,6 +291,21 @@ const styles = StyleSheet.create({
   },
   qtyBtnText: { fontSize: 18, fontWeight: '700', color: '#334155' },
   qty: { fontSize: 16, fontWeight: '600', minWidth: 20, textAlign: 'center' },
+  weightEditRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  weightEditInput: {
+    width: 60,
+    height: 36,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    backgroundColor: '#fff',
+    textAlign: 'center',
+  },
+  weightUnitLabel: { fontSize: 13, fontWeight: '600', color: '#64748b' },
   right: { alignItems: 'flex-end', gap: 4 },
   total: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
   remove: { fontSize: 16, color: '#94a3b8' },

@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  Switch,
   FlatList,
   Keyboard,
   StyleSheet,
@@ -15,16 +16,18 @@ import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { AppAlert } from '../components/AppAlert';
-import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES } from '../utils/normalizeCategory';
+import { normalizeCategory, isTaxExempt, isLikelyByWeight, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
 import { track } from '../services/analytics';
 import { formatCurrency } from '../utils/formatCurrency';
-import { parsePriceInput, isPriceOverCap, isPriceEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, roundWeight, isWeightEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
 
 interface SessionEntry {
   key: string;
   name: string;
   price: number;
   category: string | null;
+  quantity: number;
+  unit: 'each' | 'lb' | 'kg';
 }
 
 export function QuickEntryScreen() {
@@ -32,6 +35,9 @@ export function QuickEntryScreen() {
   const [priceText, setPriceText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Other');
   const [sessionEntries, setSessionEntries] = useState<SessionEntry[]>([]);
+  const [byWeight, setByWeight] = useState(false);
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  const [weightText, setWeightText] = useState('1.00');
 
   const priceInputRef = useRef<TextInput>(null);
   const nameInputRef = useRef<TextInput>(null);
@@ -46,7 +52,8 @@ export function QuickEntryScreen() {
   const parsedPrice = parsePriceInput(priceText);
   const priceTooHigh = isPriceOverCap(parsedPrice);
   const nameValid = name.trim().length > 0;
-  const canAdd = nameValid && isPriceEntered(parsedPrice);
+  const weight = roundWeight(parseFloat(weightText.replace(/[^0-9.]/g, '')));
+  const canAdd = nameValid && isPriceEntered(parsedPrice) && (!byWeight || isWeightEntered(weight));
 
   const commitAdd = () => {
     const trimmedName = name.trim();
@@ -54,11 +61,14 @@ export function QuickEntryScreen() {
       ? normalizeCategory(trimmedName)  // try to infer from name as last resort
       : selectedCategory;
     const productId = `quick-${Date.now()}`;
+    const quantity = byWeight ? weight : 1;
+    const unit = byWeight ? weightUnit : 'each';
 
     addItem({
       productId,
       name: trimmedName,
-      quantity: 1,
+      quantity,
+      unit,
       unitPrice: parsedPrice,
       appliedDiscount: 0,
       taxable: !isTaxExempt(category, locationState),
@@ -69,15 +79,16 @@ export function QuickEntryScreen() {
     });
 
     setSessionEntries((prev) => [
-      { key: productId, name: trimmedName, price: parsedPrice, category },
+      { key: productId, name: trimmedName, price: parsedPrice, category, quantity, unit },
       ...prev,
     ]);
 
-    track('quick_entry_item_added', { category, storeId: selectedStoreId, price: parsedPrice });
+    track('quick_entry_item_added', { category, storeId: selectedStoreId, price: parsedPrice, unit });
 
-    // Reset for next item — keep category selected for rapid same-category entry
+    // Reset for next item — keep category and by-weight settings for rapid same-category entry
     setName('');
     setPriceText('');
+    setWeightText('1.00');
     nameInputRef.current?.focus();
   };
 
@@ -127,7 +138,7 @@ export function QuickEntryScreen() {
             autoFocus
           />
 
-          <Text style={[styles.label, { marginTop: 14 }]}>PRICE</Text>
+          <Text style={[styles.label, { marginTop: 14 }]}>{byWeight ? `PRICE PER ${weightUnit.toUpperCase()}` : 'PRICE'}</Text>
           <View style={styles.priceRow}>
             <Text style={styles.dollarSign}>$</Text>
             <TextInput
@@ -138,12 +149,45 @@ export function QuickEntryScreen() {
               keyboardType="decimal-pad"
               placeholder="0.00"
               placeholderTextColor="#94a3b8"
-              returnKeyType="done"
-              onSubmitEditing={handleAdd}
+              returnKeyType={byWeight ? 'next' : 'done'}
+              onSubmitEditing={byWeight ? undefined : handleAdd}
             />
           </View>
           {priceTooHigh && (
             <Text style={styles.priceWarning}>That's over ${MAX_REASONABLE_PRICE} — check the decimal point</Text>
+          )}
+
+          <View style={styles.byWeightRow}>
+            <Text style={styles.label}>PRICED BY WEIGHT</Text>
+            <Switch
+              value={byWeight}
+              onValueChange={setByWeight}
+              trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
+              thumbColor={byWeight ? '#2563eb' : '#94a3b8'}
+            />
+          </View>
+          {byWeight && (
+            <View style={styles.weightRow}>
+              <TextInput
+                style={styles.weightInput}
+                value={weightText}
+                onChangeText={setWeightText}
+                keyboardType="decimal-pad"
+                placeholder="1.00"
+                placeholderTextColor="#94a3b8"
+                returnKeyType="done"
+                onSubmitEditing={handleAdd}
+              />
+              {(['lb', 'kg'] as const).map((u) => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.chip, weightUnit === u && styles.chipSelected]}
+                  onPress={() => setWeightUnit(u)}
+                >
+                  <Text style={[styles.chipText, weightUnit === u && styles.chipTextSelected]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
 
           <Text style={[styles.label, { marginTop: 14 }]}>CATEGORY</Text>
@@ -156,7 +200,10 @@ export function QuickEntryScreen() {
             renderItem={({ item: cat }) => (
               <TouchableOpacity
                 style={[styles.chip, selectedCategory === cat && styles.chipSelected]}
-                onPress={() => setSelectedCategory(cat)}
+                onPress={() => {
+                  setSelectedCategory(cat);
+                  setByWeight(isLikelyByWeight(cat as GroceryCategory));
+                }}
               >
                 <Text style={[styles.chipText, selectedCategory === cat && styles.chipTextSelected]}>
                   {cat}
@@ -195,7 +242,11 @@ export function QuickEntryScreen() {
                       <Text style={styles.entryCategory}>{entry.category}</Text>
                     )}
                   </View>
-                  <Text style={styles.entryPrice}>{formatCurrency(entry.price)}</Text>
+                  <Text style={styles.entryPrice}>
+                    {entry.unit === 'each'
+                      ? formatCurrency(entry.price)
+                      : `${entry.quantity} ${entry.unit} × ${formatCurrency(entry.price)}`}
+                  </Text>
                 </View>
               )}
             />
@@ -260,6 +311,25 @@ const styles = StyleSheet.create({
   dollarSign: { fontSize: 22, fontWeight: '600', color: '#1e293b' },
   priceInput: { flex: 1, fontSize: 28, fontWeight: '700', color: '#1e293b' },
   priceWarning: { fontSize: 12, color: '#f59e0b', fontWeight: '600', marginTop: 4 },
+
+  byWeightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  weightInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    height: 44,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
 
   chipRow: { paddingVertical: 4, gap: 6 },
   chip: {
