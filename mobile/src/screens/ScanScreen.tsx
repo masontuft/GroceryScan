@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraView as CameraViewType } from 'expo-camera';
@@ -11,7 +11,6 @@ import { AppAlert } from '../components/AppAlert';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { ErrorMessages } from '../utils/errorMessages';
 import { ocrPriceTag } from '../services/api';
-import { selectBestPrice } from '../pricing/selectBestPrice';
 import { track, trackError } from '../services/analytics';
 import type { ScanStackParamList, RootStackParamList } from '../app/index';
 
@@ -51,11 +50,19 @@ export function ScanScreen({ navigation }: Props) {
 
   const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
+  const stores = useStoreStore((s) => s.stores);
+  const fetchStores = useStoreStore((s) => s.fetchStores);
   const locationState = useLocationStore((s) => s.state);
   const locationZip = useLocationStore((s) => s.zip);
   const { isConnected } = useNetworkStatus();
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (stores.length === 0) fetchStores();
+  }, []);
+
+  const storeName = stores.find((s) => s.id === selectedStoreId)?.name ?? 'No Store';
 
   useFocusEffect(useCallback(() => {
     lastScanned.current = null;
@@ -82,25 +89,14 @@ export function ScanScreen({ navigation }: Props) {
     return true;
   };
 
-  // Sends a resolved product straight to the price-entry screen it needs —
-  // ProductDetail if a price already exists (any provider, or a prior manual
-  // entry), ManualPrice otherwise. Price-driven rather than chain-based, so
-  // it applies uniformly to any store/scan that comes back without a price.
+  // Always sends a resolved product to ProductDetail, priced or not — that
+  // screen already shows nutrition, brand info, and (when best.price is
+  // null) its own "Enter price manually" button routing into ManualPrice.
+  // Skipping straight to ManualPrice on a priceless scan used to hide all of
+  // that behind a bare price-entry form even though the product itself had
+  // already resolved successfully.
   const routeToPriceScreen = (result: Awaited<ReturnType<typeof resolveProduct>>, barcode: string) => {
-    const hasPrice = selectBestPrice(result.pricing).price !== null;
-    if (hasPrice) {
-      navigation.navigate('ProductDetail', { scanResult: result, barcode });
-    } else {
-      rootNav.navigate('ManualPrice', {
-        productId: result.product.id,
-        productName: result.product.name,
-        imageUrl: result.product.imageUrl,
-        initialBrand: result.product.brand ?? undefined,
-        initialSize: result.product.size ?? undefined,
-        initialUnit: result.product.unit ?? undefined,
-        initialCategories: result.product.categories?.length ? result.product.categories : undefined,
-      });
-    }
+    navigation.navigate('ProductDetail', { scanResult: result, barcode });
   };
 
   const handleBarcode = async (barcode: string) => {
@@ -283,11 +279,6 @@ export function ScanScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {!isConnected && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
-        </View>
-      )}
       {isFocused && (
         <CameraView
           ref={cameraRef}
@@ -303,6 +294,22 @@ export function ScanScreen({ navigation }: Props) {
           </View>
         </CameraView>
       )}
+      <View style={styles.topOverlay} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.storeBanner}
+          onPress={() => rootNav.navigate('StoreSelect')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.storeBannerIcon}>🏪</Text>
+          <Text style={styles.storeBannerText}>{storeName}</Text>
+          <Text style={styles.storeBannerChange}>Change</Text>
+        </TouchableOpacity>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineText}>{ErrorMessages.OFFLINE}</Text>
+          </View>
+        )}
+      </View>
       {(loading || ocrLoading) && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
@@ -352,4 +359,32 @@ const styles = StyleSheet.create({
   searchBtnText: { color: '#fff', fontWeight: '700' },
   offlineBanner: { backgroundColor: '#f59e0b', padding: 8, alignItems: 'center' },
   offlineText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  topOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: 12,
+    gap: 8,
+  },
+  storeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 12,
+    padding: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  storeBannerIcon: { fontSize: 16 },
+  storeBannerText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1e293b' },
+  storeBannerChange: { fontSize: 12, fontWeight: '700', color: '#2563eb' },
 });

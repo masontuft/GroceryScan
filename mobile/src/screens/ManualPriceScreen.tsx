@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Switch,
   FlatList,
   StyleSheet,
   KeyboardAvoidingView,
@@ -19,8 +20,8 @@ import { useLocationStore } from '../stores/locationStore';
 import { AppAlert } from '../components/AppAlert';
 import { submitManualEntry } from '../services/api';
 import { track, trackError } from '../services/analytics';
-import { normalizeCategory, isTaxExempt, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
-import { parsePriceInput, isPriceOverCap, isPriceEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
+import { normalizeCategory, isTaxExempt, isLikelyByWeight, STANDARD_CATEGORIES, type GroceryCategory } from '../utils/normalizeCategory';
+import { parsePriceInput, isPriceOverCap, isPriceEntered, roundWeight, isWeightEntered, MAX_REASONABLE_PRICE } from '../utils/priceValidation';
 import type { RootStackParamList } from '../app/index';
 
 type Props = {
@@ -43,6 +44,8 @@ export function ManualPriceScreen({ navigation, route }: Props) {
     initialSize,
     initialUnit,
     initialCategories,
+    initialByWeight,
+    initialWeightUnit,
   } = route.params;
 
   const stores = useStoreStore((s) => s.stores);
@@ -68,6 +71,12 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<GroceryCategory>(
     normalizeCategory(initialCategories && initialCategories.length > 0 ? initialCategories : null)
   );
+  // Prefer whatever ProductDetail already had the toggle set to — falling
+  // back to the category heuristic only when this screen is reached without
+  // that context (e.g. straight from a "not found" barcode scan).
+  const [byWeight, setByWeight] = useState(initialByWeight ?? isLikelyByWeight(selectedCategory));
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>(initialWeightUnit ?? 'lb');
+  const [weightText, setWeightText] = useState('1.00');
 
   useEffect(() => {
     if (stores.length === 0) fetchStores();
@@ -77,7 +86,9 @@ export function ManualPriceScreen({ navigation, route }: Props) {
   const priceTooHigh = isPriceOverCap(parsedPrice);
   const isOther = pickedStoreId === OTHER_STORE_ID;
   const nameValid = productName.trim().length > 0;
-  const canAdd = nameValid && isPriceEntered(parsedPrice) && (!isOther || customStoreName.trim().length > 0) && !submitting;
+  const weight = roundWeight(parseFloat(weightText.replace(/[^0-9.]/g, '')));
+  const canAdd = nameValid && isPriceEntered(parsedPrice) && (!isOther || customStoreName.trim().length > 0)
+    && (!byWeight || isWeightEntered(weight)) && !submitting;
 
   const commitAdd = async () => {
     setSubmitting(true);
@@ -114,7 +125,8 @@ export function ManualPriceScreen({ navigation, route }: Props) {
       addItem({
         productId: result.productId,
         name: productName.trim(),
-        quantity: 1,
+        quantity: byWeight ? weight : 1,
+        unit: byWeight ? weightUnit : 'each',
         unitPrice: parsedPrice,
         appliedDiscount: 0,
         taxable: !isTaxExempt(selectedCategory, locationState),
@@ -124,9 +136,14 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         category: selectedCategory,
       });
 
-      AppAlert.alert('Added', `${productName.trim()} added to basket.`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      // Navigate directly rather than gating this on an AppAlert dismissal —
+      // this screen is itself a native `presentation: 'modal'` stack screen,
+      // and stacking AppAlert's own Modal on top of it just to defer the same
+      // goBack() the alert's only button would trigger is the pattern that
+      // caused the freeze this fixed (two competing native modal transitions
+      // on the same screen). LocationScreen/StoreSelectScreen call goBack()
+      // directly for the same "save and return" case — matches that.
+      navigation.goBack();
     } catch (err) {
       trackError('ManualPriceScreen:handleAdd', err, { productId, storeId: isOther ? null : pickedStoreId });
       const message = err instanceof Error ? err.message : String(err);
@@ -184,7 +201,9 @@ export function ManualPriceScreen({ navigation, route }: Props) {
 
         {/* ── Price (required) ── */}
         <View style={styles.section}>
-          <Text style={styles.label}>PRICE <Text style={styles.required}>*</Text></Text>
+          <Text style={styles.label}>
+            {byWeight ? `PRICE PER ${weightUnit.toUpperCase()}` : 'PRICE'} <Text style={styles.required}>*</Text>
+          </Text>
           <View style={styles.priceRow}>
             <Text style={styles.dollarSign}>$</Text>
             <TextInput
@@ -201,6 +220,38 @@ export function ManualPriceScreen({ navigation, route }: Props) {
           {priceTooHigh && (
             <Text style={styles.warning}>That's over ${MAX_REASONABLE_PRICE} — check the decimal point</Text>
           )}
+
+          <View style={styles.byWeightRow}>
+            <Text style={styles.label}>PRICED BY WEIGHT</Text>
+            <Switch
+              value={byWeight}
+              onValueChange={setByWeight}
+              trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
+              thumbColor={byWeight ? '#2563eb' : '#94a3b8'}
+            />
+          </View>
+          {byWeight && (
+            <View style={styles.weightRow}>
+              <TextInput
+                style={styles.weightInput}
+                value={weightText}
+                onChangeText={setWeightText}
+                keyboardType="decimal-pad"
+                placeholder="1.00"
+                placeholderTextColor="#94a3b8"
+                returnKeyType="done"
+              />
+              {(['lb', 'kg'] as const).map((u) => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.chip, weightUnit === u && styles.chipSelected]}
+                  onPress={() => setWeightUnit(u)}
+                >
+                  <Text style={[styles.chipText, weightUnit === u && styles.chipTextSelected]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* ── Category — always shown; pre-selected from the normalized lookup category ── */}
@@ -215,7 +266,10 @@ export function ManualPriceScreen({ navigation, route }: Props) {
               <TouchableOpacity
                 key={cat}
                 style={[styles.chip, selectedCategory === cat && styles.chipSelected]}
-                onPress={() => setSelectedCategory(cat)}
+                onPress={() => {
+                  setSelectedCategory(cat);
+                  setByWeight(isLikelyByWeight(cat));
+                }}
                 hitSlop={{ top: 10, bottom: 10 }}
                 accessibilityLabel={cat}
                 accessibilityRole="button"
@@ -326,6 +380,12 @@ export function ManualPriceScreen({ navigation, route }: Props) {
           )}
         </TouchableOpacity>
       </ScrollView>
+      {submitting && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Saving…</Text>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -406,6 +466,25 @@ const styles = StyleSheet.create({
   dollarSign: { fontSize: 20, fontWeight: '600', color: '#1e293b', marginRight: 4 },
   priceInput: { flex: 1, fontSize: 24, fontWeight: '700', color: '#1e293b' },
 
+  byWeightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  weightInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    height: 44,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+
   storeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,4 +512,6 @@ const styles = StyleSheet.create({
   },
   addBtnDisabled: { backgroundColor: '#93c5fd' },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { color: '#fff', fontSize: 16 },
 });

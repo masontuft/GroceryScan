@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Switch, ActivityIndicator, StyleSheet, FlatList } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { PriceTag } from '../components/PriceTag';
 import { PromotionBadge } from '../components/PromotionBadge';
 import { NutritionPanel } from '../components/NutritionPanel';
@@ -10,9 +10,11 @@ import { AppAlert } from '../components/AppAlert';
 import { useBasketStore } from '../stores/basketStore';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
+import { useProductStore } from '../stores/productStore';
 import { selectBestPrice } from '../pricing/selectBestPrice';
-import { normalizeCategory, isTaxExempt } from '../utils/normalizeCategory';
+import { normalizeCategory, isTaxExempt, isLikelyByWeight } from '../utils/normalizeCategory';
 import { isPriceStale } from '../utils/freshness';
+import { roundWeight, isWeightEntered } from '../utils/priceValidation';
 import { supabase, submitManualEntry } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import type { Product } from '../types/product';
@@ -24,16 +26,29 @@ type Props = {
 };
 
 export function ProductDetailScreen({ route }: Props) {
-  const { scanResult } = route.params;
-  const { product, pricing, promotions } = scanResult;
+  const { scanResult, barcode } = route.params;
+  const { product } = scanResult;
+  // Stateful (not destructured straight from scanResult) so a refetch on
+  // refocus — e.g. returning from ManualPrice after submitting a price —
+  // can actually update what's shown. scanResult is a route param captured
+  // at the moment this screen was first opened, so without this the price
+  // stayed frozen on "no price" even after a manual entry just saved one.
+  const [pricing, setPricing] = useState(scanResult.pricing);
+  const [promotions, setPromotions] = useState(scanResult.promotions);
   const computedBest = selectBestPrice(pricing);
   const addItem = useBasketStore((s) => s.addItem);
+  const resolveProduct = useProductStore((s) => s.resolveProduct);
   const selectedStoreId = useStoreStore((s) => s.selectedStoreId);
   const locationState = useLocationStore((s) => s.state);
+  const locationZip = useLocationStore((s) => s.zip);
+  const category = normalizeCategory(product.categories);
 
   // Locally overrides the displayed price after an inline edit is saved, so the
   // screen reflects the correction immediately without re-fetching scanResult.
   const [priceOverride, setPriceOverride] = useState<number | null>(null);
+  const [byWeight, setByWeight] = useState(isLikelyByWeight(category));
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  const [weightText, setWeightText] = useState('1.00');
   const best = priceOverride !== null
     ? { ...computedBest, price: priceOverride, isOnSale: false, freshnessLabel: 'live' as const }
     : computedBest;
@@ -43,6 +58,40 @@ export function ProductDetailScreen({ route }: Props) {
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
+
+  // Whenever this screen is focused with no known price — whether that's the
+  // very first view of a product whose only local data is a stale/cached
+  // "no price" result, or returning here after submitting a price via
+  // ManualPrice — kick off a fresh check rather than immediately showing
+  // "Price unavailable" / "Enter price manually". checkingPrice drives a
+  // loading state in place of that section below while it's in flight.
+  const [checkingPrice, setCheckingPrice] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (computedBest.price !== null) return;
+      setCheckingPrice(true);
+      // forceRefresh: true — without it this would just return the cached
+      // result (product/pricing TTLs are hours long), silently defeating the
+      // whole point of checking again.
+      resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip }, true)
+        .then((result) => {
+          setPricing(result.pricing);
+          setPromotions(result.promotions);
+          // A fresh server price supersedes whatever the inline-edit override
+          // was tracking, and stops it from masking price changes made
+          // elsewhere (e.g. a store-side update) with stale local data.
+          setPriceOverride(null);
+        })
+        .catch((err) => {
+          trackError('ProductDetailScreen:refetchOnFocus', err, { productId: product.id, barcode });
+        })
+        .finally(() => setCheckingPrice(false));
+      // computedBest.price intentionally omitted — including it would refire
+      // this effect the moment the fetch above updates it, even though
+      // there's no new focus event; it's read once per focus, not watched.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [barcode, selectedStoreId, locationState, locationZip, product.id, resolveProduct])
+  );
 
   useEffect(() => {
     track('product_viewed', {
@@ -109,11 +158,16 @@ export function ProductDetailScreen({ route }: Props) {
       AppAlert.alert('No price available', 'Cannot add item without a known price.');
       return;
     }
-    const category = normalizeCategory(product.categories[0]);
+    const weight = roundWeight(parseFloat(weightText.replace(/[^0-9.]/g, '')));
+    if (byWeight && !isWeightEntered(weight)) {
+      AppAlert.alert('Enter a weight', 'Enter the item’s weight before adding it to the basket.');
+      return;
+    }
     addItem({
       productId: product.id,
       name: product.name,
-      quantity: 1,
+      quantity: byWeight ? weight : 1,
+      unit: byWeight ? weightUnit : 'each',
       unitPrice: best.price,
       appliedDiscount: 0,
       taxable: !isTaxExempt(category, locationState),
@@ -138,32 +192,82 @@ export function ProductDetailScreen({ route }: Props) {
         )}
       </View>
       <View style={styles.section}>
-        <PriceTag
-          price={best.price}
-          regularPrice={best.regularPrice}
-          isOnSale={best.isOnSale}
-          freshnessLabel={best.freshnessLabel}
-          isStale={stale}
-          onSave={best.price !== null ? handleSavePrice : undefined}
-        />
-        {best.price === null && (
-          <TouchableOpacity
-            style={styles.manualPriceBtn}
-            onPress={() =>
-              rootNav.navigate('ManualPrice', {
-                productId: product.id,
-                productName: product.name,
-                imageUrl: product.imageUrl ?? null,
-                initialBrand: product.brand ?? undefined,
-                initialSize: product.size ?? undefined,
-                initialUnit: product.unit ?? undefined,
-                initialCategories: product.categories?.length ? product.categories : undefined,
-              })
-            }
-            activeOpacity={0.8}
-          >
-            <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
-          </TouchableOpacity>
+        {checkingPrice ? (
+          <View style={styles.priceCheckingRow}>
+            <ActivityIndicator color="#2563eb" />
+            <Text style={styles.priceCheckingText}>Checking for a price…</Text>
+          </View>
+        ) : (
+          <>
+            <PriceTag
+              price={best.price}
+              regularPrice={best.regularPrice}
+              isOnSale={best.isOnSale}
+              freshnessLabel={best.freshnessLabel}
+              isStale={stale}
+              onSave={best.price !== null ? handleSavePrice : undefined}
+            />
+            {best.price === null && (
+              <TouchableOpacity
+                style={styles.manualPriceBtn}
+                onPress={() =>
+                  rootNav.navigate('ManualPrice', {
+                    productId: product.id,
+                    productName: product.name,
+                    imageUrl: product.imageUrl ?? null,
+                    initialBrand: product.brand ?? undefined,
+                    initialSize: product.size ?? undefined,
+                    initialUnit: product.unit ?? undefined,
+                    initialCategories: product.categories?.length ? product.categories : undefined,
+                    initialByWeight: byWeight,
+                    initialWeightUnit: weightUnit,
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+        {best.price !== null && (
+          <>
+            <View style={styles.byWeightRow}>
+              <Text style={styles.byWeightLabel}>PRICED BY WEIGHT</Text>
+              <Switch
+                value={byWeight}
+                onValueChange={setByWeight}
+                trackColor={{ false: '#e2e8f0', true: '#93c5fd' }}
+                thumbColor={byWeight ? '#2563eb' : '#94a3b8'}
+              />
+            </View>
+            {byWeight && (
+              <View style={styles.weightRow}>
+                <TextInput
+                  style={styles.weightInput}
+                  value={weightText}
+                  onChangeText={setWeightText}
+                  keyboardType="decimal-pad"
+                  placeholder="1.00"
+                  placeholderTextColor="#94a3b8"
+                  selectTextOnFocus
+                />
+                {(['lb', 'kg'] as const).map((u) => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.chip, weightUnit === u && styles.chipSelected]}
+                    onPress={() => setWeightUnit(u)}
+                    hitSlop={{ top: 9, bottom: 9 }}
+                    accessibilityLabel={u}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: weightUnit === u }}
+                  >
+                    <Text style={[styles.chipText, weightUnit === u && styles.chipTextSelected]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
         )}
       </View>
       {promotions.length > 0 && (
@@ -231,6 +335,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   manualPriceBtnText: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  priceCheckingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  priceCheckingText: { fontSize: 15, color: '#64748b' },
+  byWeightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  byWeightLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  weightInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    height: 44,
+    paddingHorizontal: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    backgroundColor: '#fff',
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  chipSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  chipText: { fontSize: 12, fontWeight: '500', color: '#475569' },
+  chipTextSelected: { color: '#2563eb', fontWeight: '700' },
   brandScroll: { gap: 10, paddingVertical: 4 },
   brandCard: { width: 100, gap: 6 },
   brandCardImage: { width: 100, height: 80, borderRadius: 8, backgroundColor: '#f1f5f9' },

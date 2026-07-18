@@ -14,6 +14,7 @@ Deno.serve(async (req) => {
       productId: string;
       quantity: number;
       unitPrice: number;
+      unit?: 'each' | 'lb' | 'kg';
       taxable: boolean;
       taxableOverridden?: boolean;
       category?: string | null;
@@ -69,6 +70,7 @@ Deno.serve(async (req) => {
       productId: item.productId,
       quantity: item.quantity,
       unitPrice: bestPriceMap[item.productId] ?? item.unitPrice,
+      unit: item.unit,
     }));
 
     // 4. Apply promotions

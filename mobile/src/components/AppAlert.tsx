@@ -29,6 +29,11 @@ const initialState: AlertState = {
 
 let alertListenerRef: ((state: AlertState) => void) | null = null;
 
+// Matches this component's Modal animationType="fade" duration — see the
+// comment on handleDismiss/handleButtonPress below for why callbacks are
+// deferred by this long rather than just to the next tick.
+const MODAL_FADE_MS = 300;
+
 export const AppAlert = {
   alert(title: string, message?: string, buttons?: AppAlertButton[]) {
     const finalButtons = buttons ?? [{ text: 'OK' }];
@@ -53,23 +58,30 @@ export function AppAlertProvider() {
     };
   }, []);
 
+  // Close the modal first, then run the button's callback only once its fade
+  // transition has actually finished — not just on the next JS tick. Screens
+  // like ManualPrice/StoreSelect/Location are presented as native
+  // `presentation: 'modal'` stack screens, and this Modal is a sibling at the
+  // NavigationContainer root, so it renders on top of an already-native-modal
+  // screen. A callback that navigates (navigation.goBack()) is itself another
+  // native modal dismissal — firing it while this Modal's own fade-out is
+  // still animating means two overlapping native modal transitions on the
+  // same screen, which is what froze the app after "Added" on
+  // ManualPriceScreen.
   const handleDismiss = () => {
     // A single-button alert has only one possible outcome, so backdrop-tap
     // confirms it regardless of style. With multiple buttons, backdrop-tap
     // only takes an action if one of them is explicitly the cancel option.
-    if (state.buttons.length === 1) {
-      state.buttons[0].onPress?.();
-    } else {
-      state.buttons.find((b) => b.style === 'cancel')?.onPress?.();
-    }
+    const callback = state.buttons.length === 1
+      ? state.buttons[0].onPress
+      : state.buttons.find((b) => b.style === 'cancel')?.onPress;
     setState(initialState);
+    if (callback) setTimeout(callback, MODAL_FADE_MS);
   };
 
   const handleButtonPress = (button: AppAlertButton) => {
-    if (button.onPress) {
-      button.onPress();
-    }
     setState(initialState);
+    if (button.onPress) setTimeout(button.onPress, MODAL_FADE_MS);
   };
 
   const isMultipleButtons = state.buttons.length > 2;
@@ -78,6 +90,9 @@ export function AppAlertProvider() {
     <Modal
       visible={state.visible}
       transparent
+      // keep in sync with MODAL_FADE_MS above — that constant assumes this
+      // duration, and the native-modal race it exists to avoid comes back
+      // silently if this changes without updating it too.
       animationType="fade"
       onRequestClose={handleDismiss}
     >
