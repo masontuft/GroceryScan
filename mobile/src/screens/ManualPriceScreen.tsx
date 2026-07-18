@@ -380,6 +380,12 @@ export function ManualPriceScreen({ navigation, route }: Props) {
           )}
         </TouchableOpacity>
       </ScrollView>
+      {submitting && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Saving…</Text>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -506,4 +512,6 @@ const styles = StyleSheet.create({
   },
   addBtnDisabled: { backgroundColor: '#93c5fd' },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { color: '#fff', fontSize: 16 },
 });
