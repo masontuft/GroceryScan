@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Switch, StyleSheet, FlatList } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Switch, ActivityIndicator, StyleSheet, FlatList } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -59,18 +59,20 @@ export function ProductDetailScreen({ route }: Props) {
 
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
 
-  // Skip the refetch on the very first focus — the screen was just navigated
-  // to with fresh data, so re-fetching immediately would be redundant.
-  const hasFocusedOnce = useRef(false);
+  // Whenever this screen is focused with no known price — whether that's the
+  // very first view of a product whose only local data is a stale/cached
+  // "no price" result, or returning here after submitting a price via
+  // ManualPrice — kick off a fresh check rather than immediately showing
+  // "Price unavailable" / "Enter price manually". checkingPrice drives a
+  // loading state in place of that section below while it's in flight.
+  const [checkingPrice, setCheckingPrice] = useState(false);
   useFocusEffect(
     useCallback(() => {
-      if (!hasFocusedOnce.current) {
-        hasFocusedOnce.current = true;
-        return;
-      }
+      if (computedBest.price !== null) return;
+      setCheckingPrice(true);
       // forceRefresh: true — without it this would just return the cached
       // result (product/pricing TTLs are hours long), silently defeating the
-      // whole point of refetching after e.g. a manual price submission.
+      // whole point of checking again.
       resolveProduct(barcode, selectedStoreId, { state: locationState, zip: locationZip }, true)
         .then((result) => {
           setPricing(result.pricing);
@@ -82,7 +84,12 @@ export function ProductDetailScreen({ route }: Props) {
         })
         .catch((err) => {
           trackError('ProductDetailScreen:refetchOnFocus', err, { productId: product.id, barcode });
-        });
+        })
+        .finally(() => setCheckingPrice(false));
+      // computedBest.price intentionally omitted — including it would refire
+      // this effect the moment the fetch above updates it, even though
+      // there's no new focus event; it's read once per focus, not watched.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [barcode, selectedStoreId, locationState, locationZip, product.id, resolveProduct])
   );
 
@@ -185,34 +192,43 @@ export function ProductDetailScreen({ route }: Props) {
         )}
       </View>
       <View style={styles.section}>
-        <PriceTag
-          price={best.price}
-          regularPrice={best.regularPrice}
-          isOnSale={best.isOnSale}
-          freshnessLabel={best.freshnessLabel}
-          isStale={stale}
-          onSave={best.price !== null ? handleSavePrice : undefined}
-        />
-        {best.price === null && (
-          <TouchableOpacity
-            style={styles.manualPriceBtn}
-            onPress={() =>
-              rootNav.navigate('ManualPrice', {
-                productId: product.id,
-                productName: product.name,
-                imageUrl: product.imageUrl ?? null,
-                initialBrand: product.brand ?? undefined,
-                initialSize: product.size ?? undefined,
-                initialUnit: product.unit ?? undefined,
-                initialCategories: product.categories?.length ? product.categories : undefined,
-                initialByWeight: byWeight,
-                initialWeightUnit: weightUnit,
-              })
-            }
-            activeOpacity={0.8}
-          >
-            <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
-          </TouchableOpacity>
+        {checkingPrice ? (
+          <View style={styles.priceCheckingRow}>
+            <ActivityIndicator color="#2563eb" />
+            <Text style={styles.priceCheckingText}>Checking for a price…</Text>
+          </View>
+        ) : (
+          <>
+            <PriceTag
+              price={best.price}
+              regularPrice={best.regularPrice}
+              isOnSale={best.isOnSale}
+              freshnessLabel={best.freshnessLabel}
+              isStale={stale}
+              onSave={best.price !== null ? handleSavePrice : undefined}
+            />
+            {best.price === null && (
+              <TouchableOpacity
+                style={styles.manualPriceBtn}
+                onPress={() =>
+                  rootNav.navigate('ManualPrice', {
+                    productId: product.id,
+                    productName: product.name,
+                    imageUrl: product.imageUrl ?? null,
+                    initialBrand: product.brand ?? undefined,
+                    initialSize: product.size ?? undefined,
+                    initialUnit: product.unit ?? undefined,
+                    initialCategories: product.categories?.length ? product.categories : undefined,
+                    initialByWeight: byWeight,
+                    initialWeightUnit: weightUnit,
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={styles.manualPriceBtnText}>Enter price manually →</Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
         {best.price !== null && (
           <>
@@ -319,6 +335,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   manualPriceBtnText: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  priceCheckingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  priceCheckingText: { fontSize: 15, color: '#64748b' },
   byWeightRow: {
     flexDirection: 'row',
     alignItems: 'center',
