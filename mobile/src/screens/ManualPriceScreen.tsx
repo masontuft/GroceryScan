@@ -134,6 +134,7 @@ export function ManualPriceScreen({ navigation, route }: Props) {
         notes: null,
         imageUrl: imageUrl ?? null,
         category: selectedCategory,
+        priceSource: 'manual',
       });
 
       // Navigate directly rather than gating this on an AppAlert dismissal —
