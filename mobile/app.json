@@ -46,7 +46,14 @@
           "backgroundColor": "#2A383F"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Allow $(PRODUCT_NAME) to access your Reminders lists so it can sync your grocery basket to a list you choose.",
+          "remindersPermission": "Allow $(PRODUCT_NAME) to access your Reminders lists so it can sync your grocery basket to a list you choose."
+        }
+      ]
     ],
     "owner": "masson",
     "extra": {

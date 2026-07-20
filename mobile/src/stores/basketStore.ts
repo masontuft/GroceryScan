@@ -14,6 +14,9 @@ interface BasketState {
   // Set when the last recalculate() call failed — lastTotal is stale when true,
   // so the UI should prefer the locally-computed estimate and offer a retry.
   recalcError: boolean;
+  // iOS Reminders list the basket last synced to (services/reminders.ts), so
+  // the user only has to pick a list once.
+  remindersListId: string | null;
 
   addItem: (item: BasketItem) => void;
   removeItem: (productId: string) => void;
@@ -22,6 +25,7 @@ interface BasketState {
   updateItem: (productId: string, changes: Partial<Pick<BasketItem, 'name' | 'unitPrice' | 'category' | 'taxable' | 'taxableOverridden' | 'notes'>>) => void;
   clearBasket: () => void;
   recalculate: () => Promise<void>;
+  setRemindersListId: (listId: string | null) => void;
 }
 
 export const useBasketStore = create<BasketState>()(
@@ -31,6 +35,7 @@ export const useBasketStore = create<BasketState>()(
       lastTotal: null,
       loading: false,
       recalcError: false,
+      remindersListId: null,
 
       addItem: (item) => {
         set((state) => {
@@ -104,6 +109,8 @@ export const useBasketStore = create<BasketState>()(
         set({ items: [], lastTotal: null });
       },
 
+      setRemindersListId: (listId) => set({ remindersListId: listId }),
+
       recalculate: async () => {
         const { items } = get();
         if (items.length === 0) {
@@ -140,7 +147,7 @@ export const useBasketStore = create<BasketState>()(
     {
       name: 'basket-store',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ items: s.items }),
+      partialize: (s) => ({ items: s.items, remindersListId: s.remindersListId }),
       skipHydration: true,
       // v1 added BasketItem.unit as a required field. Baskets persisted
       // before that (version defaults to 0 when unset) have items with no
@@ -148,13 +155,18 @@ export const useBasketStore = create<BasketState>()(
       // 'each'` check is false for them, silently swapping the qty stepper
       // for the weight-edit UI and showing "$X.XX/undefined" instead of
       // "$X.XX each".
-      version: 1,
+      // v2 added remindersListId; absent on older persisted state, so
+      // migrate backfills it to null rather than leaving it undefined.
+      version: 2,
       migrate: (persistedState, version) => {
-        const state = persistedState as { items?: Array<Record<string, unknown>> };
+        const state = persistedState as { items?: Array<Record<string, unknown>>; remindersListId?: string | null };
         if (version < 1 && state.items) {
           state.items = state.items.map((item) => ({ unit: 'each', ...item }));
         }
-        return state as unknown as { items: BasketItem[] };
+        if (version < 2) {
+          state.remindersListId = state.remindersListId ?? null;
+        }
+        return state as unknown as { items: BasketItem[]; remindersListId: string | null };
       },
     }
   )
