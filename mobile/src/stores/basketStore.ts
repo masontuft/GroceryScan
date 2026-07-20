@@ -148,11 +148,17 @@ export const useBasketStore = create<BasketState>()(
       // 'each'` check is false for them, silently swapping the qty stepper
       // for the weight-edit UI and showing "$X.XX/undefined" instead of
       // "$X.XX each".
-      version: 1,
+      // v2 added BasketItem.priceSource (which PricingProvider supplied
+      // unitPrice) so receipt-compare can attribute price deltas to a
+      // specific provider — pre-v2 items get backfilled to null.
+      version: 2,
       migrate: (persistedState, version) => {
         const state = persistedState as { items?: Array<Record<string, unknown>> };
         if (version < 1 && state.items) {
           state.items = state.items.map((item) => ({ unit: 'each', ...item }));
+        }
+        if (version < 2 && state.items) {
+          state.items = state.items.map((item) => ({ priceSource: null, ...item }));
         }
         return state as unknown as { items: BasketItem[] };
       },

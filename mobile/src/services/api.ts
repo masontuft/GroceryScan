@@ -197,6 +197,47 @@ export async function ocrPriceTag(imageBase64: string): Promise<{ price: number 
   return invokeFunction('ocr-price', { imageBase64 });
 }
 
+export interface ReceiptComparisonItem {
+  id: string;
+  productId: string | null;
+  rawText: string;
+  receiptPrice: number | null;
+  calculatedPrice: number | null;
+  priceDelta: number | null;
+  matchMethod: 'fuzzy_auto' | 'unmatched' | 'manual_confirm';
+}
+
+export interface ReceiptComparisonResult {
+  receiptScanId: string;
+  storeNameGuess: string | null;
+  totals: {
+    calculatedSubtotal: number;
+    calculatedTax: number;
+    calculatedTotal: number;
+    actualSubtotal: number | null;
+    actualTax: number | null;
+    actualTotal: number | null;
+    totalDelta: number | null;
+  };
+  items: ReceiptComparisonItem[];
+}
+
+export async function compareReceipt(args: {
+  imageBase64: string;
+  storeId: string | null;
+  basketSnapshot: BasketItem[];
+  calculatedTotal: BasketTotal;
+}): Promise<ReceiptComparisonResult> {
+  return invokeFunction<ReceiptComparisonResult>('receipt-compare', args);
+}
+
+export async function confirmReceiptMatch(args: {
+  receiptScanItemId: string;
+  productId: string | null;
+}): Promise<{ id: string; matchMethod: string; productId: string | null; calculatedPrice: number | null; priceDelta: number | null }> {
+  return invokeFunction('receipt-confirm', args);
+}
+
 /**
  * Resolves a device lat/lng to the nearest real store for a chain (currently
  * only 'walmart' is supported server-side) and upserts it into the `stores`

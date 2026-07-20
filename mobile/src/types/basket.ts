@@ -15,6 +15,11 @@ export interface BasketItem {
   notes: string | null;
   imageUrl: string | null;
   category: string | null;
+  // Which PricingProvider (StorePricing.source, e.g. 'kroger', 'serpapi_walmart')
+  // supplied unitPrice, or 'manual' for hand-entered prices. Null for items added
+  // before this field existed (backfilled by basketStore's v2 migrate()). Lets
+  // receipt-compare attribute price deltas back to a specific provider.
+  priceSource: string | null;
 }
 
 export interface BasketTotal {

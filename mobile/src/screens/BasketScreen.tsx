@@ -198,6 +198,15 @@ export function BasketScreen() {
               <Text style={styles.analysisBtnText}>📊  Basket Analysis</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={styles.analysisBtn}
+              onPress={() => rootNav.navigate('ReceiptScan')}
+              activeOpacity={0.8}
+              accessibilityLabel="Scan receipt to compare prices"
+              accessibilityRole="button"
+            >
+              <Text style={styles.analysisBtnText}>🧾  Scan Receipt</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.clearBtn}
               onPress={() =>
                 AppAlert.alert(

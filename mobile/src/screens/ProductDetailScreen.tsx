@@ -175,6 +175,9 @@ export function ProductDetailScreen({ route }: Props) {
       notes: null,
       imageUrl: product.imageUrl,
       category,
+      // priceOverride (inline-edited via handleSavePrice) always goes through
+      // submitManualEntry, so it's a 'manual' price same as best.source being null.
+      priceSource: priceOverride !== null ? 'manual' : best.source?.source ?? null,
     });
     AppAlert.alert('Added', `${product.name} added to basket.`);
   };
