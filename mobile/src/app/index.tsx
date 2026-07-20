@@ -17,6 +17,7 @@ import { RemindersListSelectScreen } from '../screens/RemindersListSelectScreen'
 import { LocationScreen } from '../screens/LocationScreen';
 import { ManualPriceScreen } from '../screens/ManualPriceScreen';
 import { QuickEntryScreen } from '../screens/QuickEntryScreen';
+import { ReceiptScanScreen } from '../screens/ReceiptScanScreen';
 import { DevScreen } from '../screens/DevScreen';
 import { AppAlertProvider } from '../components/AppAlert';
 
@@ -41,6 +42,7 @@ export type RootStackParamList = {
   RemindersListSelect: undefined;
   Location: undefined;
   Dev: undefined;
+  ReceiptScan: undefined;
   ManualPrice: {
     productId: string;          // barcode string (unknown product) OR real product UUID (known, no price)
     productName: string;
@@ -183,6 +185,11 @@ export function AppNavigator() {
             name="Dev"
             component={DevScreen}
             options={{ headerShown: true, title: 'Developer Settings' }}
+          />
+          <Root.Screen
+            name="ReceiptScan"
+            component={ReceiptScanScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'Scan Receipt' }}
           />
         </Root.Navigator>
       </PostHogProvider>

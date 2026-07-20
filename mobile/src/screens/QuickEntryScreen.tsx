@@ -76,6 +76,7 @@ export function QuickEntryScreen() {
       notes: null,
       imageUrl: null,
       category,
+      priceSource: 'manual',
     });
 
     setSessionEntries((prev) => [
