@@ -72,6 +72,53 @@ function matchScore(line: ParsedReceiptLine, item: BasketItemInput): number {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// Tried in order on a failed request (model overloaded, deprecated, or
+// rate-limited) — newest/highest-quality first, falling back toward cheaper
+// or older models that draw from a separate capacity pool and are less
+// likely to be simultaneously overloaded.
+const MODEL_FALLBACKS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
+
+async function callGeminiModel(
+  model: string,
+  imageBase64: string,
+  apiKey: string,
+  schema: Record<string, unknown>,
+  prompt: string
+): Promise<ParsedReceipt> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } },
+            { text: prompt },
+          ],
+        }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini API ${res.status}: ${err}`);
+  }
+
+  const json = await res.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned no content');
+
+  return JSON.parse(text) as ParsedReceipt;
+}
+
 async function parseReceiptWithGemini(imageBase64: string, apiKey: string): Promise<ParsedReceipt> {
   const schema = {
     type: 'OBJECT',
@@ -104,38 +151,16 @@ async function parseReceiptWithGemini(imageBase64: string, apiKey: string): Prom
     'price, and quantity if shown. Also extract the printed subtotal, tax, and total, and a guess at ' +
     'the store name/chain. Use null for anything not legible or not present.';
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } },
-            { text: prompt },
-          ],
-        }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-        },
-      }),
+  let lastErr: unknown;
+  for (const model of MODEL_FALLBACKS) {
+    try {
+      return await callGeminiModel(model, imageBase64, apiKey, schema, prompt);
+    } catch (err) {
+      console.warn(`[receipt-compare] model ${model} failed, trying next fallback:`, err);
+      lastErr = err;
     }
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini API ${res.status}: ${err}`);
   }
-
-  const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini returned no content');
-
-  return JSON.parse(text) as ParsedReceipt;
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 Deno.serve(async (req) => {

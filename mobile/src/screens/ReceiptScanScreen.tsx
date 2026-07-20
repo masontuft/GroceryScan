@@ -30,6 +30,7 @@ export function ReceiptScanScreen() {
 
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ReceiptComparisonResult | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const items = useBasketStore((s) => s.items);
@@ -65,6 +66,7 @@ export function ReceiptScanScreen() {
     }
     const camera = cameraRef.current;
     setScanning(true);
+    setCaptureError(null);
     try {
       if (!(await waitForCameraReady())) throw new Error('Camera not ready');
       const { photo } = await captureWithRetry(camera, { base64: true, quality: 0.7 });
@@ -86,10 +88,12 @@ export function ReceiptScanScreen() {
       });
     } catch (err) {
       trackError('ReceiptScanScreen:handleCapture', err, { storeId: selectedStoreId });
-      AppAlert.alert(
-        "Couldn't Read Receipt",
-        "We weren't able to read that receipt. Try again with better lighting and make sure the whole receipt is in frame."
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      // A plain AppAlert here is unreliable on top of a still-mounted live
+      // CameraView (reports of the alert silently not appearing on-device) —
+      // so, like the success path below swaps the camera for the `result`
+      // view, render a dedicated error view in place of the camera instead.
+      setCaptureError(message);
     } finally {
       setScanning(false);
     }
@@ -229,6 +233,21 @@ export function ReceiptScanScreen() {
     );
   }
 
+  if (captureError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>Couldn't Read Receipt</Text>
+        <Text style={styles.permText}>
+          We weren't able to read that receipt. Try again with better lighting and make sure the whole receipt is in frame.
+        </Text>
+        <Text style={styles.errorDetail}>{captureError}</Text>
+        <TouchableOpacity style={styles.btn} onPress={() => setCaptureError(null)}>
+          <Text style={styles.btnText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {isFocused && (
@@ -263,6 +282,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
   permText: { fontSize: 16, color: '#334155', textAlign: 'center' },
+  errorTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center' },
+  errorDetail: { fontSize: 13, color: '#94a3b8', textAlign: 'center', paddingHorizontal: 12 },
   btn: { backgroundColor: '#2563eb', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   camera: { flex: 1 },
