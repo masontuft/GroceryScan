@@ -13,6 +13,8 @@ import { ProductDetailScreen } from '../screens/ProductDetailScreen';
 import { BasketScreen } from '../screens/BasketScreen';
 import { SearchScreen } from '../screens/SearchScreen';
 import { StoreSelectScreen } from '../screens/StoreSelectScreen';
+import { RemindersListSelectScreen } from '../screens/RemindersListSelectScreen';
+import { ViewRemindersScreen } from '../screens/ViewRemindersScreen';
 import { LocationScreen } from '../screens/LocationScreen';
 import { ManualPriceScreen } from '../screens/ManualPriceScreen';
 import { QuickEntryScreen } from '../screens/QuickEntryScreen';
@@ -38,6 +40,8 @@ export type SearchStackParamList = {
 export type RootStackParamList = {
   MainTabs: undefined;
   StoreSelect: undefined;
+  RemindersListSelect: undefined;
+  ViewReminders: undefined;
   Location: undefined;
   Dev: undefined;
   ReceiptScan: undefined;
@@ -163,6 +167,16 @@ export function AppNavigator() {
             name="StoreSelect"
             component={StoreSelectScreen}
             options={{ headerShown: true, presentation: 'modal', title: 'Select Store' }}
+          />
+          <Root.Screen
+            name="RemindersListSelect"
+            component={RemindersListSelectScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'Reminders List' }}
+          />
+          <Root.Screen
+            name="ViewReminders"
+            component={ViewRemindersScreen}
+            options={{ headerShown: true, presentation: 'modal', title: 'Reminders' }}
           />
           <Root.Screen
             name="Location"

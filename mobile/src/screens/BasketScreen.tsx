@@ -12,7 +12,8 @@ import { TotalBreakdown } from '../components/TotalBreakdown';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useLocalTotal } from '../hooks/useLocalTotal';
 import { ErrorMessages } from '../utils/errorMessages';
-import { track } from '../services/analytics';
+import { track, trackError } from '../services/analytics';
+import { REMINDERS_SUPPORTED, requestRemindersPermission, syncBasketToReminders, shareBasketAsText } from '../services/reminders';
 import type { RootStackParamList } from '../app/index';
 import type { BasketItem } from '../types/basket';
 
@@ -52,6 +53,7 @@ function groupByCategory(items: BasketItem[]) {
 
 export function BasketScreen() {
   const [analysisVisible, setAnalysisVisible] = useState(false);
+  const [remindersSyncing, setRemindersSyncing] = useState(false);
   const items = useBasketStore((s) => s.items);
   const lastTotal = useBasketStore((s) => s.lastTotal);
   const loading = useBasketStore((s) => s.loading);
@@ -62,6 +64,7 @@ export function BasketScreen() {
   const updateWeight = useBasketStore((s) => s.updateWeight);
   const updateItem = useBasketStore((s) => s.updateItem);
   const recalculate = useBasketStore((s) => s.recalculate);
+  const remindersListId = useBasketStore((s) => s.remindersListId);
   const locationState = useLocationStore((s) => s.state);
   const locationCity = useLocationStore((s) => s.city);
   const locationZip = useLocationStore((s) => s.zip);
@@ -93,6 +96,37 @@ export function BasketScreen() {
       }
     }, [items.length, displayTotal.estimatedTotal])
   );
+
+  const handleSyncToReminders = async () => {
+    const granted = await requestRemindersPermission();
+    if (!granted) {
+      AppAlert.alert('Permission needed', 'Allow access to Reminders in Settings to sync your basket.');
+      return;
+    }
+    if (!remindersListId) {
+      rootNav.navigate('RemindersListSelect');
+      return;
+    }
+    setRemindersSyncing(true);
+    try {
+      await syncBasketToReminders(remindersListId, items);
+      track('basket_synced_to_reminders', { listId: remindersListId, itemCount: items.length });
+    } catch (err) {
+      trackError('basketScreen:syncReminders', err, { listId: remindersListId });
+      AppAlert.alert('Sync failed', "Couldn't sync your basket to Reminders. Please try again.");
+    } finally {
+      setRemindersSyncing(false);
+    }
+  };
+
+  const handleShareBasket = async () => {
+    try {
+      await shareBasketAsText(items);
+      track('basket_shared', { itemCount: items.length });
+    } catch (err) {
+      trackError('basketScreen:share', err);
+    }
+  };
 
   const storeBanner = (
     <TouchableOpacity
@@ -197,6 +231,51 @@ export function BasketScreen() {
             >
               <Text style={styles.analysisBtnText}>📊  Basket Analysis</Text>
             </TouchableOpacity>
+            {REMINDERS_SUPPORTED && (
+              <>
+                <TouchableOpacity
+                  style={styles.analysisBtn}
+                  onPress={handleSyncToReminders}
+                  activeOpacity={0.8}
+                  disabled={remindersSyncing}
+                  accessibilityLabel="Sync basket to Reminders"
+                  accessibilityRole="button"
+                >
+                  {remindersSyncing ? (
+                    <ActivityIndicator size="small" />
+                  ) : (
+                    <Text style={styles.analysisBtnText}>✅  Sync to Reminders</Text>
+                  )}
+                </TouchableOpacity>
+                {remindersListId && (
+                  <View style={styles.remindersSubRow}>
+                    <TouchableOpacity
+                      onPress={() => rootNav.navigate('ViewReminders')}
+                      accessibilityLabel="View synced Reminders list"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.remindersSubLink}>👀 View Reminders</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => rootNav.navigate('RemindersListSelect')}
+                      accessibilityLabel="Change synced Reminders list"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.remindersSubLink}>Change List</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+            <TouchableOpacity
+              style={styles.analysisBtn}
+              onPress={handleShareBasket}
+              activeOpacity={0.8}
+              accessibilityLabel="Share basket list"
+              accessibilityRole="button"
+            >
+              <Text style={styles.analysisBtnText}>📤  Share List</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.analysisBtn}
               onPress={() => rootNav.navigate('ReceiptScan')}
@@ -286,6 +365,8 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   analysisBtnText: { fontSize: 15, fontWeight: '600', color: '#334155' },
+  remindersSubRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: -4 },
+  remindersSubLink: { fontSize: 13, fontWeight: '600', color: '#2563eb' },
   clearBtn: { paddingVertical: 12, alignItems: 'center' },
   clearText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
   offlineBanner: { backgroundColor: '#f59e0b', padding: 8, alignItems: 'center' },

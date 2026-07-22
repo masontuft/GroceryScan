@@ -26,6 +26,8 @@ npm run android
 
 TypeScript check: `cd mobile && npx tsc --noEmit`
 
+`expo-calendar` (used for the iOS Reminders sync in [mobile/src/services/reminders.ts](mobile/src/services/reminders.ts)) isn't supported in Expo Go — testing it requires a dev client build (`eas build --profile development --platform ios` or `npx expo run:ios`), not `npm start`/`npm run ios`.
+
 ## EAS Builds (Android + iOS)
 
 Native builds are produced via EAS Build, config in [mobile/eas.json](mobile/eas.json). Three profiles: `development` (dev-client, iOS simulator + Android APK, for local iteration), `preview` (internal-distribution APK/IPA for ad-hoc QA), `production` (store-ready AAB/IPA, auto-incremented build number).
@@ -109,6 +111,7 @@ SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
 | Tax rates table | [mobile/src/constants/taxRates.json](mobile/src/constants/taxRates.json) |
 | Promotion engine | [supabase/functions/_shared/promotionEngine.ts](supabase/functions/_shared/promotionEngine.ts) |
 | Background sync | [mobile/src/services/sync.ts](mobile/src/services/sync.ts) |
+| Reminders/share export | [mobile/src/services/reminders.ts](mobile/src/services/reminders.ts) |
 | Receipt comparison edge fn | [supabase/functions/receipt-compare/index.ts](supabase/functions/receipt-compare/index.ts) |
 | Receipt scan screen | [mobile/src/screens/ReceiptScanScreen.tsx](mobile/src/screens/ReceiptScanScreen.tsx) |
 
