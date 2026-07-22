@@ -232,20 +232,40 @@ export function BasketScreen() {
               <Text style={styles.analysisBtnText}>📊  Basket Analysis</Text>
             </TouchableOpacity>
             {REMINDERS_SUPPORTED && (
-              <TouchableOpacity
-                style={styles.analysisBtn}
-                onPress={handleSyncToReminders}
-                activeOpacity={0.8}
-                disabled={remindersSyncing}
-                accessibilityLabel="Sync basket to Reminders"
-                accessibilityRole="button"
-              >
-                {remindersSyncing ? (
-                  <ActivityIndicator size="small" />
-                ) : (
-                  <Text style={styles.analysisBtnText}>✅  Sync to Reminders</Text>
+              <>
+                <TouchableOpacity
+                  style={styles.analysisBtn}
+                  onPress={handleSyncToReminders}
+                  activeOpacity={0.8}
+                  disabled={remindersSyncing}
+                  accessibilityLabel="Sync basket to Reminders"
+                  accessibilityRole="button"
+                >
+                  {remindersSyncing ? (
+                    <ActivityIndicator size="small" />
+                  ) : (
+                    <Text style={styles.analysisBtnText}>✅  Sync to Reminders</Text>
+                  )}
+                </TouchableOpacity>
+                {remindersListId && (
+                  <View style={styles.remindersSubRow}>
+                    <TouchableOpacity
+                      onPress={() => rootNav.navigate('ViewReminders')}
+                      accessibilityLabel="View synced Reminders list"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.remindersSubLink}>👀 View Reminders</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => rootNav.navigate('RemindersListSelect')}
+                      accessibilityLabel="Change synced Reminders list"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.remindersSubLink}>Change List</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
-              </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity
               style={styles.analysisBtn}
@@ -345,6 +365,8 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   analysisBtnText: { fontSize: 15, fontWeight: '600', color: '#334155' },
+  remindersSubRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: -4 },
+  remindersSubLink: { fontSize: 13, fontWeight: '600', color: '#2563eb' },
   clearBtn: { paddingVertical: 12, alignItems: 'center' },
   clearText: { fontSize: 14, color: '#ef4444', fontWeight: '600' },
   offlineBanner: { backgroundColor: '#f59e0b', padding: 8, alignItems: 'center' },

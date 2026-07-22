@@ -1,11 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { searchProducts } from '../services/api';
 import { track, trackError } from '../services/analytics';
 import { useStoreStore } from '../stores/storeStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useProductStore } from '../stores/productStore';
+import { useBasketStore } from '../stores/basketStore';
+import { REMINDERS_SUPPORTED, getRemindersForList, type SyncedReminder } from '../services/reminders';
+import { AppAlert } from '../components/AppAlert';
 import type { Product } from '../types/product';
 import type { SearchStackParamList } from '../app/index';
 
@@ -29,6 +33,24 @@ export function SearchScreen({ navigation }: Props) {
   const locationState = useLocationStore((s) => s.state);
   const locationZip = useLocationStore((s) => s.zip);
   const resolveProduct = useProductStore((s) => s.resolveProduct);
+  const remindersListId = useBasketStore((s) => s.remindersListId);
+
+  // Quick-reference list of not-yet-picked-up reminders, shown below search
+  // results (even when there are none) so it's visible while browsing/adding
+  // items. Read-only — mirrors ViewRemindersScreen, refetched on every focus
+  // since iOS gives no change notification for edits made in the Reminders app.
+  const [uncheckedReminders, setUncheckedReminders] = useState<SyncedReminder[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!REMINDERS_SUPPORTED || !remindersListId) {
+        setUncheckedReminders([]);
+        return;
+      }
+      getRemindersForList(remindersListId)
+        .then((all) => setUncheckedReminders(all.filter((r) => !r.completed)))
+        .catch((err) => trackError('SearchScreen:loadReminders', err, { listId: remindersListId }));
+    }, [remindersListId])
+  );
 
   const handleSearch = async () => {
     if (!query.trim() || searchInFlight.current) return;
@@ -66,6 +88,28 @@ export function SearchScreen({ navigation }: Props) {
     } finally {
       setResolvingId(null);
     }
+  };
+
+  // Both targets are sibling tabs (ScanTab, QuickEntryTab) under the same
+  // bottom-tab navigator this screen's SearchTab belongs to, not children of
+  // SearchStack — getParent() reaches that tab navigator. It's untyped
+  // (createBottomTabNavigator() has no generic param list, see app/index.tsx),
+  // so this is intentionally loosely typed rather than fighting that.
+  const handleReminderPress = (reminder: SyncedReminder) => {
+    const tabNav = navigation.getParent() as any;
+    track('reminder_recommendation_tapped', { title: reminder.title });
+    AppAlert.alert(
+      reminder.title,
+      'How would you like to add this to your basket?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Scan Barcode', onPress: () => tabNav?.navigate('ScanTab') },
+        {
+          text: 'Enter Manually',
+          onPress: () => tabNav?.navigate('QuickEntryTab', { initialName: reminder.title }),
+        },
+      ]
+    );
   };
 
   return (
@@ -111,6 +155,29 @@ export function SearchScreen({ navigation }: Props) {
             {resolvingId === item.id && <ActivityIndicator size="small" />}
           </TouchableOpacity>
         )}
+        ListFooterComponent={
+          REMINDERS_SUPPORTED && remindersListId ? (
+            <View style={styles.remindersSection}>
+              <Text style={styles.remindersTitle}>RECOMMENDED FROM YOUR REMINDERS</Text>
+              {uncheckedReminders.length === 0 ? (
+                <Text style={styles.remindersEmpty}>Nothing left on your list 🎉</Text>
+              ) : (
+                uncheckedReminders.map((r) => (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={styles.reminderRow}
+                    onPress={() => handleReminderPress(r)}
+                    accessibilityLabel={`Add ${r.title} from Reminders`}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.reminderText}>{r.title}</Text>
+                    <Text style={styles.reminderChevron}>›</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -127,5 +194,20 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   resultName: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
   resultBrand: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  remindersSection: { padding: 16, borderTopWidth: 1, borderColor: '#f1f5f9', marginTop: 8 },
+  remindersTitle: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5, marginBottom: 8 },
+  remindersEmpty: { fontSize: 14, color: '#94a3b8' },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderColor: '#f8fafc',
+  },
+  reminderText: { fontSize: 15, color: '#1e293b', fontWeight: '500', flex: 1 },
+  reminderChevron: { fontSize: 18, color: '#cbd5e1', fontWeight: '700' },
   resultSize: { fontSize: 12, color: '#94a3b8', marginTop: 1 },
 });

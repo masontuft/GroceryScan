@@ -81,6 +81,25 @@ export async function syncBasketToReminders(listId: string, items: BasketItem[])
   await saveReminderMap(map);
 }
 
+export interface SyncedReminder {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+// Read-only fetch of a list's current reminders, for the in-app reference
+// view — does not touch the basket or the productId -> reminder id map.
+// status:null + startDate/endDate:null returns every reminder regardless of
+// completion state (EventKit only requires a date range when a status filter
+// is also given).
+export async function getRemindersForList(listId: string): Promise<SyncedReminder[]> {
+  if (!REMINDERS_SUPPORTED) return [];
+  const reminders = await Calendar.getRemindersAsync([listId], null, null, null);
+  return reminders
+    .filter((r): r is Calendar.Reminder & { id: string; title: string } => Boolean(r.id && r.title))
+    .map((r) => ({ id: r.id, title: r.title, completed: Boolean(r.completed) }));
+}
+
 export async function shareBasketAsText(items: BasketItem[]): Promise<void> {
   const lines = items.map((item) => {
     const qty = item.unit === 'each' ? `${item.quantity}` : `${item.quantity} ${item.unit}`;

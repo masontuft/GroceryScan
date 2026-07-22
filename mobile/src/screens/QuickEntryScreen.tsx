@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -30,8 +30,16 @@ interface SessionEntry {
   unit: 'each' | 'lb' | 'kg';
 }
 
-export function QuickEntryScreen() {
-  const [name, setName] = useState('');
+// route is optional/loosely-typed — this screen is a bottom-tab screen (see
+// MainTabs in app/index.tsx), reached both with no params (tab bar tap) and
+// with a prefill param when navigated to from elsewhere (e.g. tapping a
+// reminder on SearchScreen to prefill this form via the parent tab navigator).
+interface Props {
+  route?: { params?: { initialName?: string } };
+}
+
+export function QuickEntryScreen({ route }: Props) {
+  const [name, setName] = useState(route?.params?.initialName ?? '');
   const [priceText, setPriceText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Other');
   const [sessionEntries, setSessionEntries] = useState<SessionEntry[]>([]);
@@ -48,6 +56,19 @@ export function QuickEntryScreen() {
   const locationState = useLocationStore((s) => s.state);
 
   const storeName = stores.find((s) => s.id === selectedStoreId)?.name;
+
+  // Re-apply the prefill if the user navigates here again with a different
+  // reminder while the tab is already mounted (route.params changes but the
+  // component doesn't remount) — jump straight to price entry since the name
+  // is already filled in.
+  const initialName = route?.params?.initialName;
+  useEffect(() => {
+    if (initialName) {
+      setName(initialName);
+      priceInputRef.current?.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialName]);
 
   const parsedPrice = parsePriceInput(priceText);
   const priceTooHigh = isPriceOverCap(parsedPrice);

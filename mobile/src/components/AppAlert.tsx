@@ -202,8 +202,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
     flex: 1,
   },
+  // Overrides `button`'s flex:1 — stacked (3+ button) alerts lay out in a
+  // column with no bounding height, so a flex:1 child there grows to fill
+  // all remaining space in the Modal instead of sizing to its own content.
   buttonStacked: {
-    flex: 1,
+    flex: 0,
     minHeight: 44,
   },
   buttonText: {
