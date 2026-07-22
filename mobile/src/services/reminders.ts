@@ -42,9 +42,12 @@ export async function getReminderLists(): Promise<ReminderList[]> {
   return calendars.map((c) => ({ id: c.id, title: c.title }));
 }
 
+function formatQuantity(item: BasketItem): string {
+  return item.unit === 'each' ? `${item.quantity}` : `${item.quantity} ${item.unit}`;
+}
+
 function formatReminderTitle(item: BasketItem): string {
-  const qty = item.unit === 'each' ? `${item.quantity}` : `${item.quantity} ${item.unit}`;
-  return `${qty} x ${item.name}`;
+  return `${formatQuantity(item)} x ${item.name}`;
 }
 
 // Creates/updates a reminder per basket item on the given list, and marks
@@ -117,9 +120,6 @@ export async function getRemindersForList(listId: string): Promise<SyncedReminde
 }
 
 export async function shareBasketAsText(items: BasketItem[]): Promise<void> {
-  const lines = items.map((item) => {
-    const qty = item.unit === 'each' ? `${item.quantity}` : `${item.quantity} ${item.unit}`;
-    return `- ${qty} x ${item.name}`;
-  });
+  const lines = items.map((item) => `- ${formatQuantity(item)} x ${item.name}`);
   await Share.share({ message: lines.join('\n') });
 }
