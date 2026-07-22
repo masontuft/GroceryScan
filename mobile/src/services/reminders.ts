@@ -9,9 +9,12 @@ export const REMINDERS_SUPPORTED = Platform.OS === 'ios';
 
 const REMINDER_MAP_KEY = 'reminders-product-map';
 
-// Maps productId -> EKReminder id for the list the basket was last synced to,
-// so re-syncing updates existing reminders instead of duplicating them.
-type ReminderMap = Record<string, string>;
+// Maps productId -> { EKReminder id, the list it currently lives in }, so
+// re-syncing to the SAME list updates the existing reminder in place, and
+// re-syncing to a DIFFERENT list (after "Change List") moves it instead of
+// silently editing it in place while it stays behind in the old list —
+// updateReminderAsync has no calendarId param, it only edits fields.
+type ReminderMap = Record<string, { reminderId: string; listId: string }>;
 
 async function loadReminderMap(): Promise<ReminderMap> {
   const raw = await AsyncStorage.getItem(REMINDER_MAP_KEY);
@@ -47,7 +50,10 @@ function formatReminderTitle(item: BasketItem): string {
 // Creates/updates a reminder per basket item on the given list, and marks
 // reminders complete for items that were synced before but have since left
 // the basket. Idempotent across repeated calls via the productId -> reminder
-// id map persisted locally (EKReminder has no field to key off of).
+// id map persisted locally (EKReminder has no field to key off of). Also
+// moves reminders (delete + recreate) when `listId` differs from the list
+// they were last synced to, so switching lists via "Change List" actually
+// relocates existing reminders instead of leaving them behind.
 export async function syncBasketToReminders(listId: string, items: BasketItem[]): Promise<void> {
   if (!REMINDERS_SUPPORTED) return;
   const map = await loadReminderMap();
@@ -55,19 +61,29 @@ export async function syncBasketToReminders(listId: string, items: BasketItem[])
 
   for (const item of items) {
     const title = formatReminderTitle(item);
-    const existingId = map[item.productId];
+    const existing = map[item.productId];
     try {
-      if (existingId) {
-        await Calendar.updateReminderAsync(existingId, { title, completed: false });
+      if (existing && existing.listId === listId) {
+        await Calendar.updateReminderAsync(existing.reminderId, { title, completed: false });
       } else {
-        map[item.productId] = await Calendar.createReminderAsync(listId, { title, completed: false });
+        if (existing) {
+          try {
+            await Calendar.deleteReminderAsync(existing.reminderId);
+          } catch (err) {
+            // Old reminder may already be gone (deleted by the user) — proceed
+            // to create the new one in `listId` regardless.
+            trackError('reminders:moveDelete', err, { productId: item.productId, fromListId: existing.listId });
+          }
+        }
+        const reminderId = await Calendar.createReminderAsync(listId, { title, completed: false });
+        map[item.productId] = { reminderId, listId };
       }
     } catch (err) {
       trackError('reminders:sync', err, { productId: item.productId });
     }
   }
 
-  for (const [productId, reminderId] of Object.entries(map)) {
+  for (const [productId, { reminderId }] of Object.entries(map)) {
     if (currentProductIds.has(productId)) continue;
     try {
       await Calendar.updateReminderAsync(reminderId, { completed: true });
