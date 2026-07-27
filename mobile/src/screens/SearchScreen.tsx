@@ -22,6 +22,7 @@ export function SearchScreen({ navigation }: Props) {
   const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   // Ref, not state — a rapid double-tap (or Enter + tap) both read `loading`
   // before the first setLoading(true) has re-rendered, so a state-based guard
@@ -57,14 +58,19 @@ export function SearchScreen({ navigation }: Props) {
     searchInFlight.current = true;
     setLoading(true);
     setSearched(true);
+    setSearchError(false);
     try {
       const res = await searchProducts(query.trim(), selectedStoreId);
       setResults(res);
       track('product_searched', { query: query.trim(), resultCount: res.length, storeId: selectedStoreId });
     } catch (err) {
+      // A failed request (network/edge-function error) is not the same outcome as a
+      // genuine no-match search — tracking it as `resultCount: 0` here previously
+      // conflated real search failures with legitimate zero-result searches in both
+      // the UI copy and the product_searched analytics signal.
       setResults([]);
+      setSearchError(true);
       trackError('SearchScreen:handleSearch', err, { query: query.trim() });
-      track('product_searched', { query: query.trim(), resultCount: 0, storeId: selectedStoreId });
     } finally {
       searchInFlight.current = false;
       setLoading(false);
@@ -135,7 +141,10 @@ export function SearchScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
       {loading && <ActivityIndicator style={{ marginTop: 24 }} />}
-      {!loading && searched && results.length === 0 && (
+      {!loading && searchError && (
+        <Text style={styles.empty}>Something went wrong searching. Check your connection and try again.</Text>
+      )}
+      {!loading && !searchError && searched && results.length === 0 && (
         <Text style={styles.empty}>No products found for "{query}"</Text>
       )}
       <FlatList
